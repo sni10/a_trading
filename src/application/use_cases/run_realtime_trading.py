@@ -3,7 +3,11 @@ from typing import List
 
 from src.infrastructure.logging.logging_setup import setup_logging, log_stage
 from src.domain.services.market_data.tick_source import generate_ticks
-from src.domain.services.context.state import init_context, update_metrics
+from src.domain.services.context.state import (
+    init_context,
+    update_market_state,
+    update_metrics,
+)
 from src.domain.services.indicators.indicator_engine import compute_indicators
 from src.domain.services.strategies.strategy_hub import evaluate_strategies
 from src.domain.services.orchestrator.orchestrator import decide
@@ -14,8 +18,6 @@ from src.config.config import load_config
 from src.application.context import build_context
 
 def run(
-    max_ticks: int = 10,
-    tick_sleep_sec: float = 0.5,
     pair_repository: ICurrencyPairRepository | None = None,
     *,
     symbol: str | None = None,
@@ -36,8 +38,6 @@ def run(
     # Инициализируем AppConfig из env + параметров run()
     cfg = load_config(
         symbol=symbol,
-        max_ticks=max_ticks,
-        tick_sleep_sec=tick_sleep_sec,
     )
 
     # Один процесс прототипа обслуживает ровно одну валютную пару.
@@ -107,11 +107,16 @@ def run(
             # [FEEDS]
             log_stage(
                 "FEEDS",
-                "🌐  Обновление market‑кэша по тикеру",
+                "🌐  Обновление market‑состояния и кэша по тику",
                 tick_id=tick_id,
                 symbol=symbol,
             )
-            context["market"][symbol] = {"last_price": price, "ts": tick["ts"]}
+            update_market_state(
+                context,
+                symbol=symbol,
+                price=price,
+                ts=tick["ts"],
+            )
 
             # [IND]
             indicators = compute_indicators(context, tick_id=tick_id, symbol=symbol, price=price)
