@@ -217,7 +217,8 @@ python main.py
 с параметрами по умолчанию:
 
 - `max_ticks=10`
-- `symbols=["BTC/USDT", "ETH/USDT"]`
+- `symbols=["BTC/USDT", "ETH/USDT"]` — список валютных пар, из которого
+  на старте формируется in-memory репозиторий сущностей `CurrencyPair`.
 - `tick_sleep_sec=0.2`
 
 В консоли и в файле `logs/prototype.log` будут писаться структурированные
