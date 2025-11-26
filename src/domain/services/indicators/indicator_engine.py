@@ -6,13 +6,13 @@ from src.infrastructure.logging.logging_setup import log_stage
 def compute_indicators(context: Dict[str, Any], *, tick_id: int, symbol: str, price: float) -> Dict[str, Any]:
     """Вернуть снимок индикаторов для инструмента.
 
-    Пока реализованы лишь фиктивные значения, но логика и интерфейс
-    соответствуют будущему IndicatorEngine.
+    Сейчас расчёты максимально простые (демо‑значения), но сама форма
+    лога и интерфейс соответствуют будущему полноценному IndicatorEngine.
     """
 
     log_stage(
         "IND",
-        "CLASS:IndicatorEngine:on_tick() - получает Ticker(symbol, price), обновляет внутреннее состояние и возвращает IndicatorSnapshot",
+        "Расчёт индикаторов по тику",
         tick_id=tick_id,
         symbol=symbol,
         price=price,
@@ -22,6 +22,6 @@ def compute_indicators(context: Dict[str, Any], *, tick_id: int, symbol: str, pr
     sma = price  # placeholder
     rsi = 50.0   # neutral
     snapshot = {"sma": sma, "rsi": rsi, "ts": context.get("market", {}).get(symbol, {}).get("ts")}
-    log_stage("IND", "snapshot готов", tick_id=tick_id, symbol=symbol, sma=sma, rsi=rsi)
+    log_stage("IND", "Снимок индикаторов сформирован", tick_id=tick_id, symbol=symbol, sma=sma, rsi=rsi)
     return snapshot
 
