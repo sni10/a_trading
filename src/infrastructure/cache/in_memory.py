@@ -1,4 +1,4 @@
-"""In-memory реализации кэшей под CurrencyPair + Config.
+"""In-memory реализации кэшей под CurrencyPair + AppConfig.
 
 Для раннего прототипа всё хранится в памяти, но интерфейсы совместимы
 с IMarketCache / IIndicatorStore, чтобы позже заменить их на Redis или
@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections import deque
 from typing import Any, Deque, Dict, List
 
-from src.config.environment import Config
+from src.config.config import AppConfig
 from src.domain.entities.currency_pair import CurrencyPair
 from src.domain.interfaces.cache import IIndicatorStore, IMarketCache
 
@@ -93,10 +93,10 @@ class InMemoryIndicatorStore(IIndicatorStore):
 
     Пока хранит только историю "сырых" значений для трёх уровней
     (fast/medium/heavy) и умеет отвечать, нужно ли обновлять индикаторы
-    на данном тике, исходя из интервалов в Config.
+    на данном тике, исходя из интервалов в AppConfig.
     """
 
-    def __init__(self, pair: CurrencyPair, config: Config):
+    def __init__(self, pair: CurrencyPair, config: AppConfig):
         self.pair = pair
         self.config = config
 

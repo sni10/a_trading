@@ -1,6 +1,6 @@
 """Загрузка и валидация окружения для прототипа.
 
-Минимальный Config на этом этапе:
+Минимальный AppConfig на этом этапе:
 
 * environment – логический режим запуска (local/dev/prod).
 * symbols – список торгуемых пар.
@@ -9,7 +9,7 @@
 * max_ticks, tick_sleep_sec – параметры демо‑конвейера.
 
 Важно: только этот модуль читает os.getenv; дальше по коду передаём уже
-готовый объект Config.
+готовый объект AppConfig.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from typing import List
 
 
 @dataclass
-class Config:
+class AppConfig:
     """Конфигурация раннего прототипа.
 
     На этом этапе сюда выносятся только действительно необходимые
@@ -109,16 +109,16 @@ def load_config(
     symbols: List[str] | None = None,
     max_ticks: int | None = None,
     tick_sleep_sec: float | None = None,
-) -> Config:
-    """Собрать Config из env + опциональных параметров.
+) -> AppConfig:
+    """Собрать AppConfig из env + опциональных параметров.
 
     Порядок приоритета для каждого поля:
     1. Аргументы функции (если переданы явно).
     2. Переменные окружения.
-    3. Значения по умолчанию из dataclass Config.
+    3. Значения по умолчанию из dataclass AppConfig.
     """
 
-    base = Config()
+    base = AppConfig()
 
     # environment
     env_environment = os.getenv("APP_ENV")
@@ -166,4 +166,4 @@ def load_config(
     return base
 
 
-__all__ = ["Config", "load_config"]
+__all__ = ["AppConfig", "load_config"]

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 
-from src.config.environment import Config, load_config
+from src.config.config import AppConfig, load_config
 
 
 def _clear_env(keys: list[str]) -> None:

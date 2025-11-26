@@ -3,7 +3,7 @@
 На этом этапе нужны только самые базовые методы, чтобы:
 
 * зафиксировать форму API под будущие реализации (Redis и т.п.);
-* иметь in-memory реализацию, завязанную на CurrencyPair и Config;
+* иметь in-memory реализацию, завязанную на CurrencyPair и AppConfig;
 * не тянуть детали ccxt внутрь домена – только простые dict‑структуры,
   совместимые с примерами в doc/ccxt_data_structures.md и
   doc/EXCHANGE_INTEGRATION.md.

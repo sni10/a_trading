@@ -8,7 +8,7 @@ from src.domain.services.indicators.indicator_engine import compute_indicators
 from src.domain.services.strategies.strategy_hub import evaluate_strategies
 from src.domain.services.orchestrator.orchestrator import decide
 from src.domain.services.execution.execution_service import execute
-from src.config.environment import load_config
+from src.config.config import load_config
 from src.application.context import build_context
 
 
@@ -25,7 +25,7 @@ def run(
 
     setup_logging()
 
-    # Инициализируем Config из env + параметров run()
+    # Инициализируем AppConfig из env + параметров run()
     cfg = load_config(symbols=symbols, max_ticks=max_ticks, tick_sleep_sec=tick_sleep_sec)
 
     # [BOOT]

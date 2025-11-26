@@ -5,7 +5,7 @@
 
 Используем только мок‑данные/структуры:
 
-* символы берём из Config;
+* символы берём из AppConfig;
 * базовая/котируемая валюта для пары – простое разбиение "BTC/USDT";
 * форма кэша ориентирована на структуры ccxt (см. doc/ccxt_data_structures.md
   и doc/EXCHANGE_INTEGRATION.md).
@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Any, Dict
 
-from src.config.environment import Config
+from src.config.config import AppConfig
 from src.domain.entities.currency_pair import CurrencyPair
 from src.domain.interfaces.cache import IIndicatorStore, IMarketCache
 from src.infrastructure.cache.in_memory import (
@@ -24,7 +24,7 @@ from src.infrastructure.cache.in_memory import (
 )
 
 
-def build_context(config: Config, context: Dict[str, Any]) -> Dict[str, Any]:
+def build_context(config: AppConfig, context: Dict[str, Any]) -> Dict[str, Any]:
     """Создать CurrencyPair и in-memory кэши для всех символов.
 
     Возвращает тот же dict `context`, дополнив его ключами:
