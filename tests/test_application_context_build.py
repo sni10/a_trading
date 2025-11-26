@@ -16,7 +16,11 @@ from src.infrastructure.repositories import InMemoryCurrencyPairRepository
 
 
 def test_build_context_uses_repository_and_creates_caches() -> None:
-    cfg = AppConfig(symbols=["BTC/USDT", "ETH/USDT"])
+    # В актуальной версии прототипа один процесс обслуживает одну пару.
+    # AppConfig больше не поддерживает список symbols, только одиночный
+    # ``symbol``. Тест проверяет, что build_context корректно обогащает
+    # базовый dict-контекст структурами вокруг этой пары.
+    cfg = AppConfig(symbol="BTC/USDT")
     base_ctx = init_context(cfg)
 
     ctx = build_context(cfg, base_ctx)
@@ -53,7 +57,11 @@ def test_build_context_accepts_external_repository() -> None:
     )
     repo = InMemoryCurrencyPairRepository([custom_pair])
 
-    cfg = AppConfig(symbols=["BTC/USDT", "ETH/USDT"])  # второй символ игнорируется
+    # AppConfig больше не принимает список symbols, но build_context
+    # по-прежнему обязан уметь работать с внешним репозиторием, который
+    # может содержать несколько пар. На уровне конфига фиксируем одну
+    # базовую пару, а список активных берётся из репозитория.
+    cfg = AppConfig(symbol="BTC/USDT")
     base_ctx = init_context(cfg)
 
     ctx = build_context(cfg, base_ctx, pair_repository=repo)

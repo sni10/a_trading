@@ -68,7 +68,15 @@ class CurrencyPair:
             created_at: Timestamp создания (ms)
             updated_at: Timestamp последнего обновления (ms)
         """
-        # Core
+        # --- Core ---
+
+        # Символ всегда в формате BASE/QUOTE. Это базовый инвариант,
+        # вокруг которого строится вся конфигурация процесса
+        # (один процесс = одна пара). На раннем этапе фиксируем только
+        # наличие разделителя, без агрессивного парсинга.
+        if "/" not in symbol:
+            raise ValueError("CurrencyPair.symbol must be in 'BASE/QUOTE' format")
+
         self.pair_id = pair_id
         self.symbol = symbol
         self.base_currency = base_currency
@@ -81,7 +89,16 @@ class CurrencyPair:
         self.deal_count = deal_count
         self.order_life_time = order_life_time
 
-        # Exchange params
+        # --- Exchange params ---
+
+        # Биржевые шаги количества и цены должны быть строго > 0.
+        # Это отражает контракт с провайдером прецизионов и защищает
+        # от конфигураций, при которых расчёт объёма/цены теряет смысл.
+        if min_step <= 0:
+            raise ValueError("CurrencyPair.min_step must be > 0")
+        if price_step <= 0:
+            raise ValueError("CurrencyPair.price_step must be > 0")
+
         self.min_step = min_step
         self.price_step = price_step
 
