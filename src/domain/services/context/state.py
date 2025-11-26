@@ -67,6 +67,15 @@ def update_market_state(
         }
         cache.update_ticker(ticker)
 
+    log_stage(
+        "FEEDS",
+        "Обновление market‑state по тику",
+        symbol=symbol,
+        price=price,
+        ts=ts,
+        has_cache=isinstance(cache, IMarketCache),
+    )
+
 
 def update_metrics(context: Dict[str, Any], tick_id: int) -> None:
     m = context.get("metrics", {})
@@ -89,13 +98,20 @@ def _get_window_size_for_symbol(context: Dict[str, Any], symbol: str, *, default
     return getattr(pair, "indicator_window_size", default) if pair is not None else default
 
 
-def _append_with_window(sequence: List[Any], item: Any, *, maxlen: int) -> None:
-    """Добавить элемент в список с обрезкой по ``maxlen`` с начала."""
+def _append_with_window(sequence: List[Any], item: Any, *, maxlen: int) -> bool:
+    """Добавить элемент в список с обрезкой по ``maxlen`` с начала.
+
+    Возвращает ``True``, если при добавлении пришлось обрезать голову
+    списка (старые элементы вытеснены).
+    """
 
     sequence.append(item)
+    truncated = False
     if len(sequence) > maxlen:
         # откусываем только из начала, чтобы сохранить порядок последних
         del sequence[0 : len(sequence) - maxlen]
+        truncated = True
+    return truncated
 
 
 def record_indicators(
@@ -119,7 +135,16 @@ def record_indicators(
     history_for_symbol: List[Dict[str, Any]] = history_all.setdefault(symbol, [])
 
     window = _get_window_size_for_symbol(context, symbol)
-    _append_with_window(history_for_symbol, snapshot, maxlen=window)
+    truncated = _append_with_window(history_for_symbol, snapshot, maxlen=window)
+
+    log_stage(
+        "IND",
+        "Снимок индикаторов записан в историю",
+        symbol=symbol,
+        history_len=len(history_for_symbol),
+        window=window,
+        truncated=truncated,
+    )
 
 
 def record_intents(
@@ -143,7 +168,17 @@ def record_intents(
     history_for_symbol: List[List[Dict[str, Any]]] = history_all.setdefault(symbol, [])
 
     window = _get_window_size_for_symbol(context, symbol)
-    _append_with_window(history_for_symbol, intents, maxlen=window)
+    truncated = _append_with_window(history_for_symbol, intents, maxlen=window)
+
+    log_stage(
+        "STATE",
+        "Intents сохранены в истории",
+        symbol=symbol,
+        intents_count=len(intents),
+        history_len=len(history_for_symbol),
+        window=window,
+        truncated=truncated,
+    )
 
 
 def record_decision(
@@ -163,5 +198,15 @@ def record_decision(
     history_for_symbol: List[Dict[str, Any]] = history_all.setdefault(symbol, [])
 
     window = _get_window_size_for_symbol(context, symbol)
-    _append_with_window(history_for_symbol, decision, maxlen=window)
+    truncated = _append_with_window(history_for_symbol, decision, maxlen=window)
+
+    log_stage(
+        "STATE",
+        "Решение оркестратора сохранено в истории",
+        symbol=symbol,
+        action=decision.get("action"),
+        history_len=len(history_for_symbol),
+        window=window,
+        truncated=truncated,
+    )
 
