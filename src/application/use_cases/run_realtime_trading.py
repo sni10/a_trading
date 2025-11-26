@@ -8,6 +8,8 @@ from src.domain.services.indicators.indicator_engine import compute_indicators
 from src.domain.services.strategies.strategy_hub import evaluate_strategies
 from src.domain.services.orchestrator.orchestrator import decide
 from src.domain.services.execution.execution_service import execute
+from src.domain.interfaces.currency_pair_repository import ICurrencyPairRepository
+from src.infrastructure.repositories import InMemoryCurrencyPairRepository
 from src.config.config import load_config
 from src.application.context import build_context
 
@@ -16,6 +18,7 @@ def run(
     max_ticks: int = 10,
     symbols: List[str] | None = None,
     tick_sleep_sec: float = 2,
+    pair_repository: ICurrencyPairRepository | None = None,
 ) -> None:
     """Запуск упрощённого тикового конвейера.
 
@@ -28,6 +31,26 @@ def run(
     # Инициализируем AppConfig из env + параметров run()
     cfg = load_config(symbols=symbols, max_ticks=max_ticks, tick_sleep_sec=tick_sleep_sec)
 
+    # Один процесс прототипа обслуживает ровно одну валютную пару. На
+    # этом уровне проверяем контракт и работаем только с cfg.symbols[0].
+    if len(cfg.symbols) != 1:
+        raise ValueError(
+            f"This prototype expects exactly one symbol per process, got: {cfg.symbols}"
+        )
+
+    active_symbol = cfg.symbols[0]
+
+    # Репозиторий пар: либо передан снаружи (в будущем — обёртка над БД),
+    # либо создаём in-memory репозиторий из списка символов конфига.
+    if pair_repository is None:
+        pair_repository = InMemoryCurrencyPairRepository.from_symbols(cfg.symbols)
+
+    pair = pair_repository.get_by_symbol(active_symbol)
+    if pair is None:
+        raise RuntimeError(f"Currency pair {active_symbol!r} is not configured")
+    if not pair.enabled:
+        raise RuntimeError(f"Currency pair {active_symbol!r} is disabled for trading")
+
     # [BOOT]
     log_stage(
         "BOOT",
@@ -39,8 +62,9 @@ def run(
     # Базовый dict‑контекст на основе типизированного AppConfig
     context = init_context(cfg)
 
-    # Обогащаем контекст CurrencyPair и in-memory кэшами под каждый символ
-    context = build_context(cfg, context)
+    # Обогащаем контекст CurrencyPair и in-memory кэшами, используя
+    # репозиторий пар как единственный источник правды.
+    context = build_context(cfg, context, pair_repository=pair_repository)
 
     # [LOAD]
     log_stage(

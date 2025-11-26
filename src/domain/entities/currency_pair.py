@@ -15,16 +15,16 @@ class CurrencyPair:
 
     def __init__(
         self,
-        symbol: str,
-        base_currency: str,
-        quote_currency: str,
+        symbol: str = "BTC/USDT",
+        base_currency: str = "BTC",
+        quote_currency: str = "USDT",
         # Trading settings (from bad_example)
         deal_quota: float = 25.0,
         profit_markup: float = 1.5,
         deal_count: int = 3,
         order_life_time: int = 1,
         # Exchange technical params
-        min_step: float = 0.0001,
+        min_step: float = 0.00001,
         price_step: float = 0.01,
         # Cache settings (новые, под лимит ~2MB на символ)
         bar_timeframe: Literal["1m", "5m"] = "1m",
