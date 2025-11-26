@@ -8,37 +8,51 @@ from src.domain.services.indicators.indicator_engine import compute_indicators
 from src.domain.services.strategies.strategy_hub import evaluate_strategies
 from src.domain.services.orchestrator.orchestrator import decide
 from src.domain.services.execution.execution_service import execute
+from src.config.environment import load_config
+from src.application.context import build_context
 
 
-def run(max_ticks: int = 10, symbols: List[str] | None = None, tick_sleep_sec: float = 0.2) -> None:
+def run(
+    max_ticks: int = 10,
+    symbols: List[str] | None = None,
+    tick_sleep_sec: float = 0.2,
+) -> None:
     """Запуск упрощённого тикового конвейера.
 
     Последовательность стадий:
     TickSource -> Indicators -> Strategies -> Orchestrator -> Execution.
     """
 
-    if symbols is None:
-        symbols = ["BTC/USDT", "ETH/USDT"]
-
     setup_logging()
 
     # [BOOT]
     log_stage("BOOT", "init app")
 
-    # Initialize config and context
+    # Инициализируем Config из env + параметров run()
+    cfg = load_config(symbols=symbols, max_ticks=max_ticks, tick_sleep_sec=tick_sleep_sec)
+
+    # Приводим к простому dict, чтобы не ломать существующий init_context
     config: Dict[str, Any] = {
-        "symbols": symbols,
-        "tick_sleep_sec": tick_sleep_sec,
-        "max_ticks": max_ticks,
+        "environment": cfg.environment,
+        "symbols": cfg.symbols,
+        "tick_sleep_sec": cfg.tick_sleep_sec,
+        "max_ticks": cfg.max_ticks,
+        "indicator_fast_interval": cfg.indicator_fast_interval,
+        "indicator_medium_interval": cfg.indicator_medium_interval,
+        "indicator_heavy_interval": cfg.indicator_heavy_interval,
     }
 
+    # Базовый dict‑контекст (как было ранее)
     context = init_context(config)
+
+    # Обогащаем контекст CurrencyPair и in-memory кэшами под каждый символ
+    context = build_context(cfg, context)
 
     # [LOAD]
     log_stage(
         "LOAD",
         "would load pairs/orders/positions from storage",
-        symbols=",".join(symbols),
+        symbols=",".join(cfg.symbols),
         orders=0,
         positions=0,
     )
@@ -47,12 +61,14 @@ def run(max_ticks: int = 10, symbols: List[str] | None = None, tick_sleep_sec: f
     log_stage("WARMUP", "would warm-up indicators and order books from history")
 
     # Main loop
-    log_stage("LOOP", "start main loop", limit=max_ticks)
+    log_stage("LOOP", "start main loop", limit=cfg.max_ticks)
 
     start_ts = time.time()
     tick_id = 0
 
-    for tick in generate_ticks(symbols, max_ticks=max_ticks, sleep_sec=tick_sleep_sec):
+    for tick in generate_ticks(
+        cfg.symbols, max_ticks=cfg.max_ticks, sleep_sec=cfg.tick_sleep_sec
+    ):
         tick_id += 1
         symbol = tick["symbol"]
         price = tick["price"]

@@ -26,12 +26,12 @@ class CurrencyPair:
         # Exchange technical params
         min_step: float = 0.0001,
         price_step: float = 0.01,
-        # Cache settings (новые, под лимит 2MB на символ)
+        # Cache settings (новые, под лимит ~2MB на символ)
         bar_timeframe: Literal["1m", "5m"] = "1m",
         bar_window_size: int = 10000,
-        orderbook_depth: int = 10000,
-        trades_history_size: int = 10000,
-        indicator_window_size: int = 1000,
+        orderbook_depth: int = 2000,
+        trades_history_size: int = 5000,
+        indicator_window_size: int = 10000,
         # Meta
         enabled: bool = True,
         pair_id: int | None = None,
@@ -55,7 +55,7 @@ class CurrencyPair:
             min_step: Минимальный шаг количества (lot size step)
             price_step: Минимальный шаг цены (tick size)
 
-            # Cache settings (под лимит 2MB на символ):
+            # Cache settings (под лимит ~2MB на символ):
             bar_timeframe: Таймфрейм баров ("1m" или "5m")
             bar_window_size: Кол-во баров в истории (10000 = ~1MB)
             orderbook_depth: Глубина стакана в уровнях (2000 = ~200KB)
