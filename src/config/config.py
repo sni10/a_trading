@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import List
 
 
@@ -103,6 +104,58 @@ def _parse_symbols(value: str | None, default: List[str]) -> List[str]:
     return [s for s in parts if s]
 
 
+_ENV_LOADED = False
+
+
+def _load_local_env_file() -> None:
+    """Загрузить переменные из корневого ``.env`` один раз за процесс.
+
+    Используем только стандартную библиотеку:
+
+    * файл ищется в корне репозитория (рядом с ``main.py``);
+    * формат строк: ``KEY=VALUE``;
+    * строки, начинающиеся с ``#`` или пустые, игнорируются;
+    * переменные, уже присутствующие в ``os.environ``, **не переопределяются**.
+    """
+
+    global _ENV_LOADED
+    if _ENV_LOADED:
+        return
+
+    _ENV_LOADED = True
+
+    # ``src/config/config.py`` -> корень проекта
+    root_dir = Path(__file__).resolve().parents[2]
+    env_path = root_dir / ".env"
+
+    if not env_path.is_file():
+        return
+
+    try:
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+
+            if "=" not in line:
+                continue
+
+            key, value = line.split("=", 1)
+            key = key.strip()
+            if not key or key.startswith("#"):
+                continue
+
+            # Удаляем возможные обёртки в кавычки
+            value = value.strip().strip("'").strip('"')
+
+            # Не трогаем уже заданные переменные окружения
+            if key not in os.environ:
+                os.environ[key] = value
+    except OSError:
+        # На раннем прототипе ошибки чтения .env просто игнорируем
+        return
+
+
 def load_config(
     *,
     # Параметры могут переопределять env (используется из run()).
@@ -117,6 +170,9 @@ def load_config(
     2. Переменные окружения.
     3. Значения по умолчанию из dataclass AppConfig.
     """
+
+    # Перед чтением os.getenv подгружаем локальный .env (если есть)
+    _load_local_env_file()
 
     base = AppConfig()
 

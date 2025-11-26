@@ -1,17 +1,21 @@
 from typing import Dict, Any
 
+from src.config.config import AppConfig
 from src.infrastructure.logging.logging_setup import log_stage
 
 
-def init_context(config: Dict[str, Any]) -> Dict[str, Any]:
+def init_context(config: AppConfig) -> Dict[str, Any]:
     """Создать in-memory контекст с обязательными разделами.
 
-    Логика остаётся максимально простой, но лог‑сообщение оформлено в
-    боевом стиле: кратко и человеко‑читаемо.
+    На вход принимает типизированный :class:`AppConfig` и кладёт его
+    целиком в раздел ``context["config"]`` без преобразования в dict.
+
+    Логика контекста остаётся простой: только разделы in-memory состояния,
+    без доступа к сети/БД.
     """
 
     ctx: Dict[str, Any] = {
-        "config": dict(config),
+        "config": config,
         "market": {},
         "indicators": {},
         "positions": {},

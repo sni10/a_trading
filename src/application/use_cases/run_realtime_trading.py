@@ -1,5 +1,5 @@
 import time
-from typing import Dict, Any, List
+from typing import List
 
 from src.infrastructure.logging.logging_setup import setup_logging, log_stage
 from src.domain.services.market_data.tick_source import generate_ticks
@@ -15,7 +15,7 @@ from src.application.context import build_context
 def run(
     max_ticks: int = 10,
     symbols: List[str] | None = None,
-    tick_sleep_sec: float = 0.2,
+    tick_sleep_sec: float = 2,
 ) -> None:
     """Запуск упрощённого тикового конвейера.
 
@@ -36,19 +36,8 @@ def run(
         symbols=",".join(cfg.symbols),
     )
 
-    # Приводим к простому dict, чтобы не ломать существующий init_context
-    config: Dict[str, Any] = {
-        "environment": cfg.environment,
-        "symbols": cfg.symbols,
-        "tick_sleep_sec": cfg.tick_sleep_sec,
-        "max_ticks": cfg.max_ticks,
-        "indicator_fast_interval": cfg.indicator_fast_interval,
-        "indicator_medium_interval": cfg.indicator_medium_interval,
-        "indicator_heavy_interval": cfg.indicator_heavy_interval,
-    }
-
-    # Базовый dict‑контекст (как было ранее)
-    context = init_context(config)
+    # Базовый dict‑контекст на основе типизированного AppConfig
+    context = init_context(cfg)
 
     # Обогащаем контекст CurrencyPair и in-memory кэшами под каждый символ
     context = build_context(cfg, context)
