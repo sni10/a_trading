@@ -19,6 +19,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List
 
+from src.infrastructure.logging.logging_setup import log_stage
+
 
 @dataclass
 class AppConfig:
@@ -84,6 +86,7 @@ def _parse_int(value: str | None, default: int) -> int:
     try:
         return int(value)
     except ValueError:
+        log_stage("ERROR", "Некорректное целочисленное значение в env", value=value)
         raise ValueError(f"Invalid int value in env: {value!r}") from None
 
 
@@ -93,6 +96,7 @@ def _parse_float(value: str | None, default: float) -> float:
     try:
         return float(value)
     except ValueError:
+        log_stage("ERROR", "Некорректное вещественное значение в env", value=value)
         raise ValueError(f"Invalid float value in env: {value!r}") from None
 
 
@@ -143,8 +147,9 @@ def _load_local_env_file() -> None:
             # Не трогаем уже заданные переменные окружения
             if key not in os.environ:
                 os.environ[key] = value
-    except OSError:
-        # На раннем прототипе ошибки чтения .env просто игнорируем
+    except OSError as exc:
+        # На раннем прототипе ошибки чтения .env просто игнорируем, но логируем
+        log_stage("WARN", "Не удалось прочитать .env файл", error=str(exc))
         return
 
 

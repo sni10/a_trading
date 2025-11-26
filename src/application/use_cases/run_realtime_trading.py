@@ -13,23 +13,43 @@ from src.infrastructure.repositories import InMemoryCurrencyPairRepository
 from src.config.config import load_config
 from src.application.context import build_context
 
-
 def run(
     max_ticks: int = 10,
     symbols: List[str] | None = None,
     tick_sleep_sec: float = 2,
     pair_repository: ICurrencyPairRepository | None = None,
+    *,
+    symbol: str | None = None,
 ) -> None:
     """Запуск упрощённого тикового конвейера.
 
     Последовательность стадий:
     TickSource -> Indicators -> Strategies -> Orchestrator -> Execution.
+
+    На уровне приложения прототип обслуживает **ровно одну** валютную
+    пару. Наружу рекомендуется передавать её через параметр
+    ``symbol="BTC/USDT"``. Параметр ``symbols`` (список строк) оставлен
+    только для обратной совместимости и будет удалён в будущих версиях.
     """
 
     setup_logging()
 
+    # Нормализуем вход: либо одиночный symbol, либо список symbols.
+    if symbol is not None and symbols is not None:
+        raise ValueError("Pass either 'symbol' or 'symbols', not both")
+
+    effective_symbols: List[str] | None
+    if symbol is not None:
+        effective_symbols = [symbol]
+    else:
+        effective_symbols = symbols
+
     # Инициализируем AppConfig из env + параметров run()
-    cfg = load_config(symbols=symbols, max_ticks=max_ticks, tick_sleep_sec=tick_sleep_sec)
+    cfg = load_config(
+        symbols=effective_symbols,
+        max_ticks=max_ticks,
+        tick_sleep_sec=tick_sleep_sec,
+    )
 
     # Один процесс прототипа обслуживает ровно одну валютную пару. На
     # этом уровне проверяем контракт и работаем только с cfg.symbols[0].
@@ -90,67 +110,74 @@ def run(
     start_ts = time.time()
     tick_id = 0
 
-    for tick in generate_ticks(
-        cfg.symbols, max_ticks=cfg.max_ticks, sleep_sec=cfg.tick_sleep_sec
-    ):
-        tick_id += 1
-        symbol = tick["symbol"]
-        price = tick["price"]
+    try:
+        for tick in generate_ticks(
+            cfg.symbols, max_ticks=cfg.max_ticks, sleep_sec=cfg.tick_sleep_sec
+        ):
+            tick_id += 1
+            symbol = tick["symbol"]
+            price = tick["price"]
 
-        # [TICK]
-        log_stage("TICK", "📈 Тик получен", tick_id=tick_id, symbol=symbol, price=price)
+            # [TICK]
+            log_stage("TICK", "📈 Тик получен", tick_id=tick_id, symbol=symbol, price=price)
 
-        # [FEEDS]
-        log_stage(
-            "FEEDS",
-            "🌐 Обновление market‑кэша по тикеру",
-            tick_id=tick_id,
-            symbol=symbol,
-        )
-        context["market"][symbol] = {"last_price": price, "ts": tick["ts"]}
-
-        # [IND]
-        indicators = compute_indicators(context, tick_id=tick_id, symbol=symbol, price=price)
-        context["indicators"][symbol] = indicators
-
-        # [CTX]
-        log_stage(
-            "CTX",
-            "🧠 Сбор контекста для стратегий",
-            tick_id=tick_id,
-            symbol=symbol,
-            has_ind=True,
-            positions=len(context["positions"]),
-        )
-
-        # [STRAT]
-        intents = evaluate_strategies(context, tick_id=tick_id, symbol=symbol)
-
-        # [ORCH]
-        decision = decide(intents, context, tick_id=tick_id, symbol=symbol)
-
-        # [EXEC]
-        if decision.get("action") != "HOLD":
-            execute(decision, context, tick_id=tick_id, symbol=symbol)
-        else:
+            # [FEEDS]
             log_stage(
-                "EXEC",
-                "⚙️ HOLD: заявки в биржу не отправляются",
+                "FEEDS",
+                "🌐 Обновление market‑кэша по тикеру",
                 tick_id=tick_id,
                 symbol=symbol,
-                action=decision.get("action"),
+            )
+            context["market"][symbol] = {"last_price": price, "ts": tick["ts"]}
+
+            # [IND]
+            indicators = compute_indicators(context, tick_id=tick_id, symbol=symbol, price=price)
+            context["indicators"][symbol] = indicators
+
+            # [CTX]
+            log_stage(
+                "CTX",
+                "🧠 Сбор контекста для стратегий",
+                tick_id=tick_id,
+                symbol=symbol,
+                has_ind=True,
+                positions=len(context["positions"]),
             )
 
-        # [STATE]
-        update_metrics(context, tick_id=tick_id)
+            # [STRAT]
+            intents = evaluate_strategies(context, tick_id=tick_id, symbol=symbol)
 
-        # [HEARTBEAT]
-        if tick_id % 5 == 0:
-            elapsed = time.time() - start_ts
-            tps = tick_id / elapsed if elapsed > 0 else 0.0
-            log_stage("HEARTBEAT", "💓 Конвейер жив", ticks=tick_id, tps=round(tps, 3))
+            # [ORCH]
+            decision = decide(intents, context, tick_id=tick_id, symbol=symbol)
 
-    # [STOP]
-    elapsed = time.time() - start_ts
-    log_stage("STOP", "🛑 Остановка конвейера", total_ticks=tick_id, elapsed_sec=round(elapsed, 3))
+            # [EXEC]
+            if decision.get("action") != "HOLD":
+                execute(decision, context, tick_id=tick_id, symbol=symbol)
+            else:
+                log_stage(
+                    "EXEC",
+                    "⚙️ HOLD: заявки в биржу не отправляются",
+                    tick_id=tick_id,
+                    symbol=symbol,
+                    action=decision.get("action"),
+                )
+
+            # [STATE]
+            update_metrics(context, tick_id=tick_id)
+
+            # [HEARTBEAT]
+            if tick_id % 5 == 0:
+                elapsed = time.time() - start_ts
+                tps = tick_id / elapsed if elapsed > 0 else 0.0
+                log_stage("HEARTBEAT", "💓 Конвейер жив", ticks=tick_id, tps=round(tps, 3))
+
+    except KeyboardInterrupt:
+        log_stage("WARN", "Прерывание по Ctrl+C", tick_id=tick_id)
+    except Exception as exc:
+        log_stage("ERROR", "Критическая ошибка в торговом цикле", tick_id=tick_id, error=str(exc), error_type=type(exc).__name__)
+        raise
+    finally:
+        # [STOP]
+        elapsed = time.time() - start_ts
+        log_stage("STOP", "🛑 Остановка конвейера", total_ticks=tick_id, elapsed_sec=round(elapsed, 3))
 
