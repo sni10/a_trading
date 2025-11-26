@@ -3,6 +3,9 @@ from typing import List
 
 from src.infrastructure.logging.logging_setup import setup_logging, log_stage
 from src.domain.services.market_data.tick_source import generate_ticks
+from src.domain.services.market_data.orderflow_simulator import (
+    update_orderflow_from_tick,
+)
 from src.domain.services.context.state import (
     init_context,
     update_market_state,
@@ -118,9 +121,18 @@ def run(
                 ts=tick["ts"],
             )
 
+            # Дополнительно симулируем стакан/трейды/бары поверх тика.
+            update_orderflow_from_tick(
+                context,
+                symbol=symbol,
+                price=price,
+                ts=tick["ts"],
+            )
+
             # [IND]
-            indicators = compute_indicators(context, tick_id=tick_id, symbol=symbol, price=price)
-            context["indicators"][symbol] = indicators
+            indicators = compute_indicators(
+                context, tick_id=tick_id, symbol=symbol, price=price
+            )
 
             # [CTX]
             log_stage(
@@ -133,10 +145,21 @@ def run(
             )
 
             # [STRAT]
-            intents = evaluate_strategies(context, tick_id=tick_id, symbol=symbol)
+            intents = evaluate_strategies(
+                context, tick_id=tick_id, symbol=symbol
+            )
+
+            # Сохраняем intents в контексте и истории для будущего анализа
+            # и возможной замены поставщика решений.
+            from src.domain.services.context.state import record_intents, record_decision
+
+            record_intents(context, symbol=symbol, intents=intents)
 
             # [ORCH]
             decision = decide(intents, context, tick_id=tick_id, symbol=symbol)
+
+            # Сохраняем принятое решение в состоянии/истории.
+            record_decision(context, symbol=symbol, decision=decision)
 
             # [EXEC]
             if decision.get("action") != "HOLD":
