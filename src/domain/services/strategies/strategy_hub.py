@@ -6,12 +6,13 @@ from src.infrastructure.logging.logging_setup import log_stage
 def evaluate_strategies(context: Dict[str, Any], *, tick_id: int, symbol: str) -> List[Dict[str, Any]]:
     """Вернуть список намерений (intents) для указанного инструмента.
 
-    Сейчас реализована лишь очень простая демонстрационная логика.
+    Сейчас реализована лишь очень простая демонстрационная логика, но
+    формат логов уже приближен к боевому.
     """
 
     log_stage(
         "STRAT",
-        "CLASS:StrategyHub:evaluate_all() - получает context и возвращает список intents (BUY/SELL/HOLD, confidence, reason)",
+        "Оценка стратегий и формирование intents",
         tick_id=tick_id,
         symbol=symbol,
     )
@@ -24,6 +25,6 @@ def evaluate_strategies(context: Dict[str, Any], *, tick_id: int, symbol: str) -
     else:
         intents = [{"action": "HOLD", "confidence": 0.1, "reason": "no_signal", "params": {}}]
 
-    log_stage("STRAT", "intents сформированы", tick_id=tick_id, symbol=symbol, intents=intents)
+    log_stage("STRAT", "Intents сформированы", tick_id=tick_id, symbol=symbol, intents=intents)
     return intents
 
