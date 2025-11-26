@@ -42,10 +42,9 @@ if __name__ == "__main__":  # pragma: no cover - сценарий запуска
 
     try:
         cli_symbol = _parse_cli_pair(sys.argv)
-        # Для совместимости с существующим конфигом и конвейером передаём
-        # список из одной пары. Внутри run() инициализируется репозиторий
-        # CurrencyPair и проверяется, что такая пара существует и активна.
-        run(symbols=[cli_symbol])
+        # В прототипе один процесс обслуживает одну пару, поэтому
+        # передаём одиночный symbol в use-case.
+        run(symbol=cli_symbol)
     except KeyboardInterrupt:
         log_stage("WARN", "Прерывание работы по Ctrl+C")
         sys.exit(0)

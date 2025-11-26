@@ -31,7 +31,10 @@ def build_context(
     context: Dict[str, Any],
     pair_repository: ICurrencyPairRepository | None = None,
 ) -> Dict[str, Any]:
-    """Создать CurrencyPair и in-memory кэши для всех активных пар.
+    """Создать CurrencyPair и in-memory кэши для активных пар.
+
+    В текущем прототипе один процесс обслуживает **одну** пару из
+    :class:`AppConfig` (``config.symbol``).
 
     Возвращает тот же dict `context`, дополнив его ключами:
 
@@ -41,11 +44,11 @@ def build_context(
     """
 
     # Если репозиторий не передан явно (юнит‑тестом или другим
-    # use‑case), создаём in-memory реализацию из списка символов
+    # use‑case), создаём in-memory реализацию из одиночного символа
     # AppConfig. Тем самым точкой агрегации становится CurrencyPair,
     # а не «сырые» строки символов.
     if pair_repository is None:
-        pair_repository = InMemoryCurrencyPairRepository.from_symbols(config.symbols)
+        pair_repository = InMemoryCurrencyPairRepository.from_symbols([config.symbol])
 
     pairs: Dict[str, CurrencyPair] = {}
     market_caches: Dict[str, IMarketCache] = {}

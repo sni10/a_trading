@@ -3,19 +3,19 @@
 Минимальный AppConfig на этом этапе:
 
 * environment – логический режим запуска (local/dev/prod).
-* symbols – список торгуемых пар.
+* symbol – **одна** торгуемая пара на процесс ("BTC/USDT" и т.п.).
 * indicator_*_interval – частота обновления уровней индикаторов в тиках
   (fast/medium/heavy: 1 / 3 / 5 по умолчанию).
 * max_ticks, tick_sleep_sec – параметры демо‑конвейера.
 
 Важно: только этот модуль читает os.getenv; дальше по коду передаём уже
-готовый объект AppConfig.
+готовый объект :class:`AppConfig`.
 """
 
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List
 
@@ -35,9 +35,11 @@ class AppConfig:
     environment: str = "local"
 
     # Базовые настройки конвейера
-    symbols: List[str] = field(
-        default_factory=lambda: ["BTC/USDT", "ETH/USDT"]
-    )
+    # В раннем прототипе один процесс всегда обслуживает **одну**
+    # валютную пару. Поэтому здесь фиксируем одиночный ``symbol``.
+    # Поддержка нескольких пар (и связанных списков) будет добавляться
+    # отдельно, когда появится полноценный MarketBus.
+    symbol: str = "BTC/USDT"
     max_ticks: int = 10
     tick_sleep_sec: float = 0.2
 
@@ -156,7 +158,7 @@ def _load_local_env_file() -> None:
 def load_config(
     *,
     # Параметры могут переопределять env (используется из run()).
-    symbols: List[str] | None = None,
+    symbol: str | None = None,
     max_ticks: int | None = None,
     tick_sleep_sec: float | None = None,
 ) -> AppConfig:
@@ -178,14 +180,14 @@ def load_config(
     if env_environment:
         base.environment = env_environment
 
-    # symbols
-    # На этом этапе список торговых пар берётся только из значений по
-    # умолчанию AppConfig или из явных аргументов функции. Переменная
-    # окружения "SYMBOLS" намеренно игнорируется, чтобы точкой
-    # агрегации оставалась CurrencyPair через репозиторий, а не сырые
-    # строки из env.
-    if symbols is not None:
-        base.symbols = list(symbols)
+    # symbol
+    # На этом этапе **одна** торговая пара берётся либо из значений по
+    # умолчанию :class:`AppConfig`, либо из явного аргумента функции.
+    # Переменная окружения "SYMBOLS" намеренно игнорируется, чтобы
+    # точкой агрегации оставалась CurrencyPair через репозиторий, а не
+    # сырые строки из env.
+    if symbol is not None:
+        base.symbol = symbol
 
     # max_ticks
     env_max_ticks = os.getenv("MAX_TICKS")

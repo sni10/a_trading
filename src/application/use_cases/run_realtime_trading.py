@@ -15,7 +15,6 @@ from src.application.context import build_context
 
 def run(
     max_ticks: int = 10,
-    symbols: List[str] | None = None,
     tick_sleep_sec: float = 0.5,
     pair_repository: ICurrencyPairRepository | None = None,
     *,
@@ -27,43 +26,27 @@ def run(
     TickSource -> Indicators -> Strategies -> Orchestrator -> Execution.
 
     На уровне приложения прототип обслуживает **ровно одну** валютную
-    пару. Наружу рекомендуется передавать её через параметр
-    ``symbol="BTC/USDT"``. Параметр ``symbols`` (список строк) оставлен
-    только для обратной совместимости и будет удалён в будущих версиях.
+    пару. Наружу она всегда передаётся через параметр
+    ``symbol="BTC/USDT"``. Поддержка списков ``symbols`` на этом уровне
+    полностью убрана.
     """
 
     setup_logging()
 
-    # Нормализуем вход: либо одиночный symbol, либо список symbols.
-    if symbol is not None and symbols is not None:
-        raise ValueError("Pass either 'symbol' or 'symbols', not both")
-
-    effective_symbols: List[str] | None
-    if symbol is not None:
-        effective_symbols = [symbol]
-    else:
-        effective_symbols = symbols
-
     # Инициализируем AppConfig из env + параметров run()
     cfg = load_config(
-        symbols=effective_symbols,
+        symbol=symbol,
         max_ticks=max_ticks,
         tick_sleep_sec=tick_sleep_sec,
     )
 
-    # Один процесс прототипа обслуживает ровно одну валютную пару. На
-    # этом уровне проверяем контракт и работаем только с cfg.symbols[0].
-    if len(cfg.symbols) != 1:
-        raise ValueError(
-            f"This prototype expects exactly one symbol per process, got: {cfg.symbols}"
-        )
-
-    active_symbol = cfg.symbols[0]
+    # Один процесс прототипа обслуживает ровно одну валютную пару.
+    active_symbol = cfg.symbol
 
     # Репозиторий пар: либо передан снаружи (в будущем — обёртка над БД),
-    # либо создаём in-memory репозиторий из списка символов конфига.
+    # либо создаём in-memory репозиторий из одного символа конфига.
     if pair_repository is None:
-        pair_repository = InMemoryCurrencyPairRepository.from_symbols(cfg.symbols)
+        pair_repository = InMemoryCurrencyPairRepository.from_symbols([cfg.symbol])
 
     pair = pair_repository.get_by_symbol(active_symbol)
     if pair is None:
@@ -76,7 +59,7 @@ def run(
         "BOOT",
         "Запуск демо‑конвейера",
         environment=cfg.environment,
-        symbols=",".join(cfg.symbols),
+        symbol=cfg.symbol,
     )
 
     # Базовый dict‑контекст на основе типизированного AppConfig
@@ -90,7 +73,7 @@ def run(
     log_stage(
         "LOAD",
         "📦 Загрузка state (пока мок: пары/ордера/позиции из памяти)",
-        symbols=",".join(cfg.symbols),
+        symbol=cfg.symbol,
         orders=0,
         positions=0,
     )
@@ -112,7 +95,7 @@ def run(
 
     try:
         for tick in generate_ticks(
-            cfg.symbols, max_ticks=cfg.max_ticks, sleep_sec=cfg.tick_sleep_sec
+            cfg.symbol, max_ticks=cfg.max_ticks, sleep_sec=cfg.tick_sleep_sec
         ):
             tick_id += 1
             symbol = tick["symbol"]

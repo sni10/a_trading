@@ -25,7 +25,7 @@ def test_load_config_defaults(monkeypatch) -> None:
     cfg = load_config()
 
     assert cfg.environment == "local"
-    assert cfg.symbols == ["BTC/USDT", "ETH/USDT"]
+    assert cfg.symbol == "BTC/USDT"
     assert cfg.max_ticks == 10
     assert cfg.tick_sleep_sec == 0.2
     assert cfg.indicator_fast_interval == 1
@@ -46,9 +46,9 @@ def test_load_config_from_env(monkeypatch) -> None:
     cfg = load_config()
 
     assert cfg.environment == "dev"
-    # Список символов больше не управляется через env-переменную SYMBOLS,
-    # поэтому берутся дефолты из AppConfig.
-    assert cfg.symbols == ["BTC/USDT", "ETH/USDT"]
+    # Символ больше не управляется через env-переменную SYMBOLS,
+    # поэтому берётся дефолт из AppConfig.
+    assert cfg.symbol == "BTC/USDT"
     assert cfg.max_ticks == 5
     assert cfg.tick_sleep_sec == 0.1
     assert cfg.indicator_fast_interval == 2
