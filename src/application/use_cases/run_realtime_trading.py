@@ -25,11 +25,16 @@ def run(
 
     setup_logging()
 
-    # [BOOT]
-    log_stage("BOOT", "init app")
-
     # Инициализируем Config из env + параметров run()
     cfg = load_config(symbols=symbols, max_ticks=max_ticks, tick_sleep_sec=tick_sleep_sec)
+
+    # [BOOT]
+    log_stage(
+        "BOOT",
+        "Запуск демо‑конвейера",
+        environment=cfg.environment,
+        symbols=",".join(cfg.symbols),
+    )
 
     # Приводим к простому dict, чтобы не ломать существующий init_context
     config: Dict[str, Any] = {
@@ -51,17 +56,23 @@ def run(
     # [LOAD]
     log_stage(
         "LOAD",
-        "would load pairs/orders/positions from storage",
+        "📦 Загрузка state (пока мок: пары/ордера/позиции из памяти)",
         symbols=",".join(cfg.symbols),
         orders=0,
         positions=0,
     )
 
     # [WARMUP]
-    log_stage("WARMUP", "would warm-up indicators and order books from history")
+    log_stage(
+        "WARMUP",
+        "🔥 Прогрев индикаторов и стаканов (исторические данные, OHLCV)",
+        indicator_fast_interval=cfg.indicator_fast_interval,
+        indicator_medium_interval=cfg.indicator_medium_interval,
+        indicator_heavy_interval=cfg.indicator_heavy_interval,
+    )
 
     # Main loop
-    log_stage("LOOP", "start main loop", limit=cfg.max_ticks)
+    log_stage("LOOP", "🔄 Старт основного торгового цикла", max_ticks=cfg.max_ticks, tick_sleep_sec=cfg.tick_sleep_sec)
 
     start_ts = time.time()
     tick_id = 0
@@ -74,12 +85,12 @@ def run(
         price = tick["price"]
 
         # [TICK]
-        log_stage("TICK", "received tick", tick_id=tick_id, symbol=symbol, price=price)
+        log_stage("TICK", "📈 Тик получен", tick_id=tick_id, symbol=symbol, price=price)
 
         # [FEEDS]
         log_stage(
             "FEEDS",
-            "CLASS:MarketCache:update() - получает Ticker, обновляет market cache, ничего не возвращает",
+            "🌐 Обновление market‑кэша по тикеру",
             tick_id=tick_id,
             symbol=symbol,
         )
@@ -92,11 +103,11 @@ def run(
         # [CTX]
         log_stage(
             "CTX",
-            "CLASS:ContextBuilder:compose() - получает market/indicators/positions/risk, возвращает dict контекст",
+            "🧠 Сбор контекста для стратегий",
             tick_id=tick_id,
             symbol=symbol,
             has_ind=True,
-            has_pos=len(context["positions"]),
+            positions=len(context["positions"]),
         )
 
         # [STRAT]
@@ -111,7 +122,7 @@ def run(
         else:
             log_stage(
                 "EXEC",
-                "CLASS:ExecutionService:execute() - HOLD: ничего не отправляем",
+                "⚙️ HOLD: заявки в биржу не отправляются",
                 tick_id=tick_id,
                 symbol=symbol,
                 action=decision.get("action"),
@@ -124,9 +135,9 @@ def run(
         if tick_id % 5 == 0:
             elapsed = time.time() - start_ts
             tps = tick_id / elapsed if elapsed > 0 else 0.0
-            log_stage("HEARTBEAT", "alive", ticks=tick_id, tps=round(tps, 3))
+            log_stage("HEARTBEAT", "💓 Конвейер жив", ticks=tick_id, tps=round(tps, 3))
 
     # [STOP]
     elapsed = time.time() - start_ts
-    log_stage("STOP", "graceful stop", total_ticks=tick_id, elapsed_sec=round(elapsed, 3))
+    log_stage("STOP", "🛑 Остановка конвейера", total_ticks=tick_id, elapsed_sec=round(elapsed, 3))
 

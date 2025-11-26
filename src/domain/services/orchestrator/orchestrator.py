@@ -4,14 +4,18 @@ from src.infrastructure.logging.logging_setup import log_stage
 
 
 def decide(intents: List[Dict[str, Any]], context: Dict[str, Any], *, tick_id: int, symbol: str) -> Dict[str, Any]:
-    """Простейший оркестратор: первое действие, отличное от HOLD, побеждает."""
+    """Простейший оркестратор: первое действие, отличное от HOLD, побеждает.
+
+    Логи оформлены в стиле продакшен‑системы: видно, сколько intents
+    пришло на вход и какое решение принято.
+    """
 
     log_stage(
         "ORCH",
-        "CLASS:Orchestrator:decide() - получает intents и context, применяет risk/cooldown, возвращает Decision",
+        "Получен список intents от стратегий",
         tick_id=tick_id,
         symbol=symbol,
-        intents=intents,
+        intents_count=len(intents),
     )
 
     decision: Dict[str, Any] = {
@@ -30,7 +34,7 @@ def decide(intents: List[Dict[str, Any]], context: Dict[str, Any], *, tick_id: i
 
     log_stage(
         "ORCH",
-        "decision готов",
+        "Принято решение по intents",
         tick_id=tick_id,
         symbol=symbol,
         action=decision.get("action"),

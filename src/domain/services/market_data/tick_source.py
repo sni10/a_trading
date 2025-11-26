@@ -9,16 +9,17 @@ from src.infrastructure.logging.logging_setup import log_stage
 def generate_ticks(symbols: List[str], max_ticks: int = 10, sleep_sec: float = 0.2) -> Iterable[Dict]:
     """Синхронный фейковый генератор тиков.
 
-    Возвращает dict-объекты с ключами symbol, price, ts.
-    Логирует старт работы; детальное логирование происходит на уровне
-    TICK-стадии в конвейере.
+    Возвращает ``dict`` с ключами ``symbol``, ``price``, ``ts``.
+    В логах фиксируется только старт генерации; сами тики подробно
+    логируются на стадии TICK основного конвейера.
     """
 
     log_stage(
         "TICK",
-        "CLASS:TickSource:__iter__() - генерирует фиктивные тики, возвращает dict {symbol, price, ts}",
+        "Старт генерации тестовых тиков",
         symbols=",".join(symbols),
-        limit=max_ticks,
+        max_ticks=max_ticks,
+        sleep_sec=sleep_sec,
     )
 
     base_prices = {s: 100.0 + random.random() * 10 for s in symbols}
