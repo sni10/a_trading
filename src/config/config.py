@@ -96,14 +96,6 @@ def _parse_float(value: str | None, default: float) -> float:
         raise ValueError(f"Invalid float value in env: {value!r}") from None
 
 
-def _parse_symbols(value: str | None, default: List[str]) -> List[str]:
-    if value is None or value.strip() == "":
-        return list(default)
-    # SYMBOLS="BTC/USDT,ETH/USDT"
-    parts = [s.strip() for s in value.split(",")]
-    return [s for s in parts if s]
-
-
 _ENV_LOADED = False
 
 
@@ -182,11 +174,13 @@ def load_config(
         base.environment = env_environment
 
     # symbols
-    env_symbols = os.getenv("SYMBOLS")
+    # На этом этапе список торговых пар берётся только из значений по
+    # умолчанию AppConfig или из явных аргументов функции. Переменная
+    # окружения "SYMBOLS" намеренно игнорируется, чтобы точкой
+    # агрегации оставалась CurrencyPair через репозиторий, а не сырые
+    # строки из env.
     if symbols is not None:
         base.symbols = list(symbols)
-    else:
-        base.symbols = _parse_symbols(env_symbols, base.symbols)
 
     # max_ticks
     env_max_ticks = os.getenv("MAX_TICKS")

@@ -15,7 +15,6 @@ def test_load_config_defaults(monkeypatch) -> None:
 
     _clear_env([
         "APP_ENV",
-        "SYMBOLS",
         "MAX_TICKS",
         "TICK_SLEEP_SEC",
         "INDICATOR_FAST_INTERVAL",
@@ -38,7 +37,6 @@ def test_load_config_from_env(monkeypatch) -> None:
     """Env‑переменные переопределяют дефолты."""
 
     monkeypatch.setenv("APP_ENV", "dev")
-    monkeypatch.setenv("SYMBOLS", "ETH/USDT,BTC/USDT")
     monkeypatch.setenv("MAX_TICKS", "5")
     monkeypatch.setenv("TICK_SLEEP_SEC", "0.1")
     monkeypatch.setenv("INDICATOR_FAST_INTERVAL", "2")
@@ -48,7 +46,9 @@ def test_load_config_from_env(monkeypatch) -> None:
     cfg = load_config()
 
     assert cfg.environment == "dev"
-    assert cfg.symbols == ["ETH/USDT", "BTC/USDT"]
+    # Список символов больше не управляется через env-переменную SYMBOLS,
+    # поэтому берутся дефолты из AppConfig.
+    assert cfg.symbols == ["BTC/USDT", "ETH/USDT"]
     assert cfg.max_ticks == 5
     assert cfg.tick_sleep_sec == 0.1
     assert cfg.indicator_fast_interval == 2
