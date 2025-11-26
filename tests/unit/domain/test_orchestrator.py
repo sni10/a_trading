@@ -82,3 +82,45 @@ def test_decide_handles_missing_params_in_intent():
     assert result["action"] == "BUY"
     assert result["reason"] == "manual"
     assert result["params"] == {}
+
+
+@pytest.mark.unit
+def test_decide_respects_risk_limit_when_amount_within_limit():
+    """Если объём сделки не превышает риск-лимит, действие не понижается.
+
+    Оркестратор должен вернуть действие BUY, так как amount <= max_amount.
+    """
+
+    intents = [
+        {"action": "BUY", "reason": "signal", "params": {"amount": 0.5}},
+    ]
+    context = {
+        "market": {"BTC/USDT": {"ts": 2222222222}},
+        "risk": {"BTC/USDT": {"max_amount": 1.0}},
+    }
+
+    result = decide(intents, context, tick_id=6, symbol="BTC/USDT")
+
+    assert result["action"] == "BUY"
+    assert result["reason"] == "signal"
+    assert result["params"]["amount"] == 0.5
+
+
+@pytest.mark.unit
+def test_decide_downgrades_to_hold_when_risk_limit_exceeded():
+    """Если объём сделки превышает риск-лимит, решение понижается до HOLD."""
+
+    intents = [
+        {"action": "BUY", "reason": "signal", "params": {"amount": 2.0}},
+    ]
+    context = {
+        "market": {"BTC/USDT": {"ts": 3333333333}},
+        "risk": {"BTC/USDT": {"max_amount": 1.0}},
+    }
+
+    result = decide(intents, context, tick_id=7, symbol="BTC/USDT")
+
+    assert result["action"] == "HOLD"
+    assert result["reason"] == "risk_limit_exceeded"
+    # ts для HOLD должен соответствовать последнему тику из контекста
+    assert result["ts"] == 3333333333
