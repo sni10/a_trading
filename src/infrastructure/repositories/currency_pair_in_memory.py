@@ -11,6 +11,9 @@ from typing import Dict, Iterable, List
 
 from src.domain.entities.currency_pair import CurrencyPair
 from src.domain.interfaces.currency_pair_repository import ICurrencyPairRepository
+from src.domain.interfaces.exchange_pair_metadata_provider import (
+    IExchangePairMetadataProvider,
+)
 
 
 class InMemoryCurrencyPairRepository(ICurrencyPairRepository):
@@ -20,11 +23,33 @@ class InMemoryCurrencyPairRepository(ICurrencyPairRepository):
     создаются из списка символов через :meth:`from_symbols`.
     """
 
-    def __init__(self, pairs: Iterable[CurrencyPair]):
+    def __init__(
+        self,
+        pairs: Iterable[CurrencyPair],
+        precision_provider: IExchangePairMetadataProvider | None = None,
+    ):
+        """Создать репозиторий из готовых объектов :class:`CurrencyPair`.
+
+        Если передан ``precision_provider``, то для каждой пары будут
+        запрошены актуальные прецизионы у провайдера и поля
+        :attr:`CurrencyPair.min_step` и :attr:`CurrencyPair.price_step`
+        будут **перезаписаны**, даже если у объекта уже были значения
+        (например, он пришёл из БД).
+        """
+
         pairs_list: List[CurrencyPair] = list(pairs)
         index: Dict[str, CurrencyPair] = {}
 
         for pair in pairs_list:
+            # Обновляем биржевые прецизионы из внешнего провайдера,
+            # если он передан. Это делает биржу источником правды,
+            # а БД/дефолты – лишь стартовыми значениями.
+            if precision_provider is not None:
+                precisions = precision_provider.get_precisions(pair.symbol)
+                if precisions is not None:
+                    pair.min_step = precisions["min_step"]
+                    pair.price_step = precisions["price_step"]
+
             symbol = pair.symbol
             if symbol in index:
                 raise ValueError(f"Duplicate currency pair symbol: {symbol!r}")
@@ -36,7 +61,11 @@ class InMemoryCurrencyPairRepository(ICurrencyPairRepository):
     # --- Фабричный метод ---
 
     @classmethod
-    def from_symbols(cls, symbols: List[str]) -> "InMemoryCurrencyPairRepository":
+    def from_symbols(
+        cls,
+        symbols: List[str],
+        precision_provider: IExchangePairMetadataProvider | None = None,
+    ) -> "InMemoryCurrencyPairRepository":
         """Создать репозиторий из списка символов.
 
         На этом этапе базовая/котируемая валюта определяются простым
@@ -61,7 +90,7 @@ class InMemoryCurrencyPairRepository(ICurrencyPairRepository):
                 )
             )
 
-        return cls(pairs)
+        return cls(pairs, precision_provider=precision_provider)
 
     # --- API репозитория ---
 
