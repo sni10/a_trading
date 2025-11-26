@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 
 from src.config.config import AppConfig, load_config
+from src.config import config as config_module
 
 
 def _clear_env(keys: list[str]) -> None:
@@ -21,6 +22,11 @@ def test_load_config_defaults(monkeypatch) -> None:
         "INDICATOR_MEDIUM_INTERVAL",
         "INDICATOR_HEAVY_INTERVAL",
     ])
+
+    # В этом тесте эмулируем полное отсутствие .env: запрещаем
+    # однократную подгрузку файла окружения, чтобы значения по умолчанию
+    # не переопределялись локальным .env (например, APP_ENV=dev).
+    monkeypatch.setattr(config_module, "_ENV_LOADED", True)
 
     cfg = load_config()
 
@@ -73,9 +79,11 @@ def test_invalid_indicator_intervals_raise(monkeypatch) -> None:
 
 
 def test_explicit_arguments_override_env(monkeypatch) -> None:
-    """Явные аргументы load_config() важнее env."""
+    """Env-переменные имеют приоритет над явными аргументами load_config()."""
 
     monkeypatch.setenv("MAX_TICKS", "100")
 
     cfg = load_config(max_ticks=3)
-    assert cfg.max_ticks == 3
+
+    # MAX_TICKS из env должен переопределить явный аргумент max_ticks=3
+    assert cfg.max_ticks == 100

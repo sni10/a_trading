@@ -157,17 +157,24 @@ def _load_local_env_file() -> None:
 
 def load_config(
     *,
-    # Параметры могут переопределять env (используется из run()).
+    # Параметры могут уточнять конфиг, но не перекрывают env.
     symbol: str | None = None,
     max_ticks: int | None = None,
     tick_sleep_sec: float | None = None,
 ) -> AppConfig:
-    """Собрать AppConfig из env + опциональных параметров.
+    """Собрать AppConfig из значений по умолчанию + env + параметров.
 
-    Порядок приоритета для каждого поля:
-    1. Аргументы функции (если переданы явно).
-    2. Переменные окружения.
-    3. Значения по умолчанию из dataclass AppConfig.
+    Общий приоритет:
+
+    * сначала берутся значения по умолчанию из :class:`AppConfig`;
+    * затем они **переопределяются переменными окружения** (включая
+      те, что подгружены из ``.env``);
+    * явные аргументы функции могут задать значение **только если для
+      поля нет значения в env**.
+
+    Исключение: торговый ``symbol`` намеренно не управляется через env
+    (переменная ``SYMBOLS`` игнорируется), поэтому для него порядок
+    такой: аргумент функции → значение по умолчанию.
     """
 
     # Перед чтением os.getenv подгружаем локальный .env (если есть)
@@ -191,17 +198,18 @@ def load_config(
 
     # max_ticks
     env_max_ticks = os.getenv("MAX_TICKS")
-    if max_ticks is not None:
-        base.max_ticks = max_ticks
-    else:
+    if env_max_ticks is not None:
+        # Env имеет наивысший приоритет
         base.max_ticks = _parse_int(env_max_ticks, base.max_ticks)
+    elif max_ticks is not None:
+        base.max_ticks = max_ticks
 
     # tick_sleep_sec
     env_tick_sleep = os.getenv("TICK_SLEEP_SEC")
-    if tick_sleep_sec is not None:
-        base.tick_sleep_sec = tick_sleep_sec
-    else:
+    if env_tick_sleep is not None:
         base.tick_sleep_sec = _parse_float(env_tick_sleep, base.tick_sleep_sec)
+    elif tick_sleep_sec is not None:
+        base.tick_sleep_sec = tick_sleep_sec
 
     # indicator intervals
     env_fast = os.getenv("INDICATOR_FAST_INTERVAL")
