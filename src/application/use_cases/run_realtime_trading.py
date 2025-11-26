@@ -16,7 +16,7 @@ from src.application.context import build_context
 def run(
     max_ticks: int = 10,
     symbols: List[str] | None = None,
-    tick_sleep_sec: float = 2,
+    tick_sleep_sec: float = 0.5,
     pair_repository: ICurrencyPairRepository | None = None,
     *,
     symbol: str | None = None,
@@ -119,12 +119,12 @@ def run(
             price = tick["price"]
 
             # [TICK]
-            log_stage("TICK", "📈 Тик получен", tick_id=tick_id, symbol=symbol, price=price)
+            log_stage("TICK", "📈  Тик получен", tick_id=tick_id, symbol=symbol, price=price)
 
             # [FEEDS]
             log_stage(
                 "FEEDS",
-                "🌐 Обновление market‑кэша по тикеру",
+                "🌐  Обновление market‑кэша по тикеру",
                 tick_id=tick_id,
                 symbol=symbol,
             )
@@ -137,7 +137,7 @@ def run(
             # [CTX]
             log_stage(
                 "CTX",
-                "🧠 Сбор контекста для стратегий",
+                "🧠  Сбор контекста для стратегий",
                 tick_id=tick_id,
                 symbol=symbol,
                 has_ind=True,
@@ -169,7 +169,7 @@ def run(
             if tick_id % 5 == 0:
                 elapsed = time.time() - start_ts
                 tps = tick_id / elapsed if elapsed > 0 else 0.0
-                log_stage("HEARTBEAT", "💓 Конвейер жив", ticks=tick_id, tps=round(tps, 3))
+                log_stage("HEARTBEAT", "💓  Конвейер жив", ticks=tick_id, tps=round(tps, 3))
 
     except KeyboardInterrupt:
         log_stage("WARN", "Прерывание по Ctrl+C", tick_id=tick_id)
@@ -179,5 +179,5 @@ def run(
     finally:
         # [STOP]
         elapsed = time.time() - start_ts
-        log_stage("STOP", "🛑 Остановка конвейера", total_ticks=tick_id, elapsed_sec=round(elapsed, 3))
+        log_stage("STOP", "🛑  Остановка конвейера", total_ticks=tick_id, elapsed_sec=round(elapsed, 3))
 

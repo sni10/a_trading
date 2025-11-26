@@ -38,8 +38,17 @@ def _parse_cli_pair(argv: list[str]) -> str:
 
 
 if __name__ == "__main__":  # pragma: no cover - сценарий запуска
-    cli_symbol = _parse_cli_pair(sys.argv)
-    # Для совместимости с существующим конфигом и конвейером передаём
-    # список из одной пары. Внутри run() инициализируется репозиторий
-    # CurrencyPair и проверяется, что такая пара существует и активна.
-    run(symbols=[cli_symbol])
+    from src.infrastructure.logging.logging_setup import log_stage
+
+    try:
+        cli_symbol = _parse_cli_pair(sys.argv)
+        # Для совместимости с существующим конфигом и конвейером передаём
+        # список из одной пары. Внутри run() инициализируется репозиторий
+        # CurrencyPair и проверяется, что такая пара существует и активна.
+        run(symbols=[cli_symbol])
+    except KeyboardInterrupt:
+        log_stage("WARN", "Прерывание работы по Ctrl+C")
+        sys.exit(0)
+    except Exception as exc:
+        log_stage("ERROR", "Критическая ошибка в main()", error=str(exc), error_type=type(exc).__name__)
+        sys.exit(1)
