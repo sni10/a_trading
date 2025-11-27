@@ -35,18 +35,18 @@ jobs:
         run: |
           LATEST_TAG="${{ steps.get_latest_tag.outputs.latest_tag }}"
 
-# Remove 'v' prefix and split version
-# Remove 'v' prefix and any existing suffix (-alpha, -beta, etc)
+          # Remove 'v' prefix and split version
+          # Remove 'v' prefix and any existing suffix (-alpha, -beta, etc)
           VERSION=${LATEST_TAG#v}
-# Remove for REALEASE
+          # Remove for REALEASE
           VERSION=${VERSION%%-*}
-# Remove for REALEASE
+          # Remove for REALEASE
           IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
 
           # Increment patch version
           PATCH=$((PATCH + 1))
 
-#          NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+          # NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
           NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}-alpha"
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "New version: $NEW_VERSION"
@@ -87,11 +87,10 @@ jobs:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
           gh release create "${{ steps.calculate_version.outputs.new_version }}" \
-#           --title "Release ${{ steps.calculate_version.outputs.new_version }}" \
             --title "Alpha Release ${{ steps.calculate_version.outputs.new_version }}" \
             --prerelease \
             --notes-file - <<'EOF'
-          ## Changes in this Alpha Release
+          ## Changes in this Release
 
           Triggered by push to `${{ github.ref_name }}` (commit `${{ github.sha }}`)
 
