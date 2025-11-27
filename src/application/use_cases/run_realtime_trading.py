@@ -136,6 +136,8 @@ def run_demo_offline(
             )
 
             # Дополнительно симулируем стакан/трейды/бары поверх тика.
+            # В боевом async‑сценарии эту роль выполняет реальный коннектор
+            # и воркер стакана; здесь остаётся только demo‑симуляция.
             update_orderflow_from_tick(
                 context,
                 symbol=symbol,
@@ -208,6 +210,54 @@ async def _run_order_book_refresh_worker(
     )
 
 
+async def _run_realtime_core(
+    *,
+    tick_source: TickSource,
+    pipeline: TickPipelineService,
+    snapshot_svc: StateSnapshotService,
+    context: dict,
+    cfg: AppConfig,
+    symbol: str,
+    start_tick_id: int,
+) -> None:
+    """Core‑цикл async‑конвейера поверх абстрактного источника тиков.
+
+    Вынесен в отдельную функцию, чтобы его можно было
+    тестировать через фейковые ``tick_source`` / ``snapshot_svc`` /
+    ``pipeline`` **без** реальных сетевых подключений и CCXT.
+    """
+
+    loop = asyncio.get_event_loop()
+    start_ts = loop.time()
+    tick_id = start_tick_id
+
+    async for ticker in tick_source.stream():
+        tick_id += 1
+
+        price = float(ticker["last"])
+        ts = ticker["timestamp"] or int(loop.time() * 1000)
+
+        pipeline.process_tick(
+            context,
+            symbol=symbol,
+            tick_id=tick_id,
+            price=price,
+            ts=ts,
+        )
+
+        snapshot_svc.maybe_save(context, tick_id=tick_id)
+
+        if tick_id % 5 == 0:
+            elapsed = loop.time() - start_ts
+            tps = tick_id / elapsed if elapsed > 0 else 0.0
+            log_stage(
+                "HEARTBEAT",
+                "Конвейер жив",
+                ticks=tick_id,
+                tps=round(tps, 3),
+            )
+
+
 async def run_realtime_from_exchange(symbol: str | None = None) -> None:
     """Боевой async‑сценарий real‑time торговли от реальной биржи.
 
@@ -254,35 +304,17 @@ async def run_realtime_from_exchange(symbol: str | None = None) -> None:
     )
 
     pipeline = TickPipelineService(cfg)
-    loop = asyncio.get_event_loop()
-    start_ts = loop.time()
 
     try:
-        async for ticker in tick_source.stream():
-            tick_id += 1
-
-            price = float(ticker["last"])
-            ts = ticker["timestamp"] or int(loop.time() * 1000)
-
-            pipeline.process_tick(
-                context,
-                symbol=active_symbol,
-                tick_id=tick_id,
-                price=price,
-                ts=ts,
-            )
-
-            snapshot_svc.maybe_save(context, tick_id=tick_id)
-
-            if tick_id % 5 == 0:
-                elapsed = loop.time() - start_ts
-                tps = tick_id / elapsed if elapsed > 0 else 0.0
-                log_stage(
-                    "HEARTBEAT",
-                    "Конвейер жив",
-                    ticks=tick_id,
-                    tps=round(tps, 3),
-                )
+        await _run_realtime_core(
+            tick_source=tick_source,
+            pipeline=pipeline,
+            snapshot_svc=snapshot_svc,
+            context=context,
+            cfg=cfg,
+            symbol=active_symbol,
+            start_tick_id=tick_id,
+        )
     finally:
         orderbook_task.cancel()
         try:

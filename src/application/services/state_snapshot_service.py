@@ -11,8 +11,8 @@ from typing import Any, Dict
 
 from src.config.config import AppConfig
 from src.domain.services.context.state import apply_state_snapshot, make_state_snapshot
+from src.domain.interfaces.state_snapshot_store import IStateSnapshotStore
 from src.infrastructure.logging.logging_setup import log_stage
-from src.infrastructure.state.file_state_snapshot_store import FileStateSnapshotStore
 
 
 class StateSnapshotService:
@@ -23,7 +23,7 @@ class StateSnapshotService:
     оперирует только ``dict``‑контекстом.
     """
 
-    def __init__(self, store: FileStateSnapshotStore, cfg: AppConfig) -> None:
+    def __init__(self, store: IStateSnapshotStore, cfg: AppConfig) -> None:
         self._store = store
         self._cfg = cfg
         self._key = f"{cfg.environment}:{cfg.symbol}"
