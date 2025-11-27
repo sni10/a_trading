@@ -48,6 +48,16 @@ class AppConfig:
     indicator_medium_interval: int = 3
     indicator_heavy_interval: int = 5
 
+    # Параметры интеграции с биржевым коннектором
+    # (используются только в async‑конвейере и воркерах рынка).
+    exchange_id: str = "binance"
+    sandbox_mode: bool = False
+    order_book_refresh_interval_seconds: float = 5.0
+
+    # Интервал между файловыми снапшотами state в тиках. Значение 0
+    # отключает периодическое сохранение снапшотов.
+    state_snapshot_interval_ticks: int = 100
+
     def validate(self) -> None:
         """Проверить базовые инварианты конфига.
 
@@ -81,6 +91,12 @@ class AppConfig:
         if self.tick_sleep_sec < 0:
             raise ValueError("tick_sleep_sec must be >= 0")
 
+        if self.order_book_refresh_interval_seconds <= 0:
+            raise ValueError("order_book_refresh_interval_seconds must be > 0")
+
+        if self.state_snapshot_interval_ticks < 0:
+            raise ValueError("state_snapshot_interval_ticks must be >= 0")
+
 
 def _parse_int(value: str | None, default: int) -> int:
     if value is None or value == "":
@@ -100,6 +116,18 @@ def _parse_float(value: str | None, default: float) -> float:
     except ValueError:
         log_stage("ERROR", "Некорректное вещественное значение в env", value=value)
         raise ValueError(f"Invalid float value in env: {value!r}") from None
+
+
+def _parse_bool(value: str | None, default: bool) -> bool:
+    if value is None or value == "":
+        return default
+    v = value.strip().lower()
+    if v in {"1", "true", "yes", "y", "on"}:
+        return True
+    if v in {"0", "false", "no", "n", "off"}:
+        return False
+    log_stage("ERROR", "Некорректное булево значение в env", value=value)
+    raise ValueError(f"Invalid bool value in env: {value!r}") from None
 
 
 _ENV_LOADED = False
@@ -224,6 +252,26 @@ def load_config(
     )
     base.indicator_heavy_interval = _parse_int(
         env_heavy, base.indicator_heavy_interval
+    )
+
+    # exchange / connector settings (env только переопределяет дефолты)
+    env_exchange_id = os.getenv("EXCHANGE_ID")
+    if env_exchange_id:
+        base.exchange_id = env_exchange_id
+
+    env_sandbox = os.getenv("EXCHANGE_SANDBOX_MODE")
+    base.sandbox_mode = _parse_bool(env_sandbox, base.sandbox_mode)
+
+    env_ob_interval = os.getenv("ORDER_BOOK_REFRESH_INTERVAL_SECONDS")
+    base.order_book_refresh_interval_seconds = _parse_float(
+        env_ob_interval,
+        base.order_book_refresh_interval_seconds,
+    )
+
+    # state snapshot interval (env переопределяет дефолт)
+    env_snapshot_interval = os.getenv("STATE_SNAPSHOT_INTERVAL_TICKS")
+    base.state_snapshot_interval_ticks = _parse_int(
+        env_snapshot_interval, base.state_snapshot_interval_ticks
     )
 
     # Финальная проверка инвариантов

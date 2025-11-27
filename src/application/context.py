@@ -1,14 +1,12 @@
 """Высокоуровневая сборка контекста под тиковый конвейер.
 
 На этом этапе мы не переписываем существующий dict‑контекст, а
-"обогащаем" его сущностями CurrencyPair и in-memory кэшами.
+"обогащаем" его сущностями :class:`CurrencyPair` и in-memory кэшами.
 
-Используем только мок‑данные/структуры:
-
-* символы берём из AppConfig;
-* базовая/котируемая валюта для пары – простое разбиение "BTC/USDT";
-* форма кэша ориентирована на структуры ccxt (см. doc/ccxt_data_structures.md
-  и doc/EXCHANGE_INTEGRATION.md).
+Символы берутся из :class:`AppConfig`, базовая/котируемая валюта пары
+получается из строки вида ``"BTC/USDT"``. Форма кэша ориентирована на
+структуры ccxt (см. ``doc/ccxt_data_structures.md`` и
+``doc/EXCHANGE_INTEGRATION.md``).
 """
 
 from __future__ import annotations

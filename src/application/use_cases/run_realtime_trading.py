@@ -10,6 +10,8 @@ from src.domain.services.context.state import (
     init_context,
     update_market_state,
     update_metrics,
+    apply_state_snapshot,
+    make_state_snapshot,
 )
 from src.domain.services.indicators.indicator_engine import compute_indicators
 from src.domain.services.strategies.strategy_hub import evaluate_strategies
@@ -19,6 +21,7 @@ from src.domain.interfaces.currency_pair_repository import ICurrencyPairReposito
 from src.infrastructure.repositories import InMemoryCurrencyPairRepository
 from src.config.config import load_config
 from src.application.context import build_context
+from src.infrastructure.state.file_state_snapshot_store import FileStateSnapshotStore
 
 def run(
     pair_repository: ICurrencyPairRepository | None = None,
@@ -72,14 +75,27 @@ def run(
     # репозиторий пар как единственный источник правды.
     context = build_context(cfg, context, pair_repository=pair_repository)
 
-    # [LOAD]
-    log_stage(
-        "LOAD",
-        "📦 Загрузка state (пока мок: пары/ордера/позиции из памяти)",
-        symbol=cfg.symbol,
-        orders=0,
-        positions=0,
-    )
+    # --- Загрузка state из снапшота (если есть) ---
+    snapshot_store = FileStateSnapshotStore()
+    snapshot_key = f"{cfg.environment}:{cfg.symbol}"
+    loaded_snapshot = snapshot_store.load_snapshot(snapshot_key)
+    loaded_tick_id = 0
+
+    if loaded_snapshot is not None:
+        apply_state_snapshot(context, symbol=cfg.symbol, snapshot=loaded_snapshot)
+        loaded_tick_id = int(loaded_snapshot.get("tick_id") or 0)
+        log_stage(
+            "LOAD",
+            "📦 Снапшот state найден и загружен",
+            symbol=cfg.symbol,
+            tick_id=loaded_tick_id,
+        )
+    else:
+        log_stage(
+            "LOAD",
+            "📦 Снапшот state не найден, стартуем с пустого in-memory state",
+            symbol=cfg.symbol,
+        )
 
     # [WARMUP]
     log_stage(
@@ -94,7 +110,7 @@ def run(
     log_stage("LOOP", "🔄 Старт основного торгового цикла", max_ticks=cfg.max_ticks, tick_sleep_sec=cfg.tick_sleep_sec)
 
     start_ts = time.time()
-    tick_id = 0
+    tick_id = loaded_tick_id
 
     try:
         for tick in generate_ticks(
@@ -175,6 +191,12 @@ def run(
 
             # [STATE]
             update_metrics(context, tick_id=tick_id)
+
+            # Периодическое сохранение снапшота во внешнее хранилище
+            interval = getattr(cfg, "state_snapshot_interval_ticks", 0)
+            if interval > 0 and tick_id % interval == 0:
+                snapshot = make_state_snapshot(context, symbol=symbol, tick_id=tick_id)
+                snapshot_store.save_snapshot(snapshot_key, snapshot)
 
             # [HEARTBEAT]
             if tick_id % 5 == 0:
