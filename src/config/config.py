@@ -54,6 +54,21 @@ class AppConfig:
     sandbox_mode: bool = False
     order_book_refresh_interval_seconds: float = 5.0
 
+    # API‑ключи биржи. На раннем этапе они опциональны: если заданы,
+    # коннектор будет аутентифицироваться и сможет работать с приватными
+    # методами. Для получения только публичных данных (тикер/стакан)
+    # поля могут оставаться пустыми.
+    #
+    # Источники значений:
+    # * прямые переменные окружения ``EXCHANGE_API_KEY`` /
+    #   ``EXCHANGE_API_SECRET``;
+    # * либо пути к файлам с ключами через
+    #   ``EXCHANGE_API_KEY_FILE`` / ``EXCHANGE_API_SECRET_FILE`` –
+    #   содержимое файла читается целиком и используется как значение
+    #   ключа. Это позволяет хранить секреты в ``secure_api_keys``.
+    exchange_api_key: str | None = None
+    exchange_api_secret: str | None = None
+
     # Интервал между файловыми снапшотами state в тиках. Значение 0
     # отключает периодическое сохранение снапшотов.
     state_snapshot_interval_ticks: int = 100
@@ -267,6 +282,49 @@ def load_config(
         env_ob_interval,
         base.order_book_refresh_interval_seconds,
     )
+
+    # --- API‑ключи биржи ---
+    # Приоритет: прямые значения в env, затем файлы.
+    env_api_key = os.getenv("EXCHANGE_API_KEY")
+    env_api_secret = os.getenv("EXCHANGE_API_SECRET")
+
+    # Вспомогательная функция для чтения ключей из файла. Путь может быть
+    # как абсолютным, так и относительным к корню репозитория.
+    def _read_key_file(var_name: str) -> str | None:
+        path_value = os.getenv(var_name)
+        if not path_value:
+            return None
+
+        root_dir = Path(__file__).resolve().parents[2]
+        file_path = Path(path_value)
+        if not file_path.is_absolute():
+            file_path = root_dir / file_path
+
+        try:
+            return file_path.read_text(encoding="utf-8").strip()
+        except OSError as exc:  # pragma: no cover - защита от средовых ошибок
+            log_stage(
+                "WARN",
+                "Не удалось прочитать файл API‑ключа",
+                env_var=var_name,
+                path=str(file_path),
+                error=str(exc),
+            )
+            return None
+
+    if env_api_key is not None:
+        base.exchange_api_key = env_api_key
+    else:
+        file_key = _read_key_file("EXCHANGE_API_KEY_FILE")
+        if file_key is not None:
+            base.exchange_api_key = file_key
+
+    if env_api_secret is not None:
+        base.exchange_api_secret = env_api_secret
+    else:
+        file_secret = _read_key_file("EXCHANGE_API_SECRET_FILE")
+        if file_secret is not None:
+            base.exchange_api_secret = file_secret
 
     # state snapshot interval (env переопределяет дефолт)
     env_snapshot_interval = os.getenv("STATE_SNAPSHOT_INTERVAL_TICKS")

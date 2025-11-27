@@ -59,9 +59,18 @@ class CcxtProExchangeConnector(IExchangeConnector):
 
         exchange_cls = getattr(ccxt, exchange_id)
 
-        # На этом этапе используем минимальный набор настроек. Ключи/секреты
-        # при необходимости будут добавлены в AppConfig позже.
-        self._exchange = exchange_cls({})
+        # Базовые параметры клиента ccxt.pro. Для получения только
+        # публичных данных (тикеры/стакан) достаточно пустого словаря,
+        # но если в :class:`AppConfig` заданы API‑ключи, используем их.
+        params: dict[str, Any] = {}
+
+        api_key = getattr(config, "exchange_api_key", None)
+        api_secret = getattr(config, "exchange_api_secret", None)
+        if api_key and api_secret:
+            params["apiKey"] = api_key
+            params["secret"] = api_secret
+
+        self._exchange = exchange_cls(params)
 
         if getattr(config, "sandbox_mode", False):
             # см. doc/ccxt_data_structures.md и официальную документацию ccxt
@@ -72,6 +81,7 @@ class CcxtProExchangeConnector(IExchangeConnector):
             "Создан CcxtProExchangeConnector",
             exchange_id=exchange_id,
             sandbox=getattr(config, "sandbox_mode", False),
+            has_api_key=bool(api_key and api_secret),
         )
 
     async def close(self) -> None:
