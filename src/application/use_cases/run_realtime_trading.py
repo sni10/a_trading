@@ -42,7 +42,10 @@ def run_demo_offline(
     *,
     symbol: str | None = None,
 ) -> None:
-    """Синхронный демо‑режим без сети поверх ``generate_ticks``.
+    """
+    !!! DEPRECATED !!! DEPRECATED !!! DEPRECATED !!!
+    
+    Синхронный демо‑режим без сети поверх ``generate_ticks``.
 
     Этот сценарий **не обращается к реальной бирже** и полностью
     изолирует симуляцию рынка внутри процесса.
@@ -360,10 +363,17 @@ async def run_realtime_from_exchange(symbol: str | None = None) -> None:
 
     snapshot_store = FileStateSnapshotStore()
     snapshot_svc = StateSnapshotService(snapshot_store, cfg)
-    ticker_id = snapshot_svc.load(context)
+    loaded_ticker_id = snapshot_svc.load(context)
 
-    if ticker_id > 0:
-        log_info(f"📦 Загружен снапшот состояния, ticker_id={ticker_id}", _LOG)
+    # Важно: реактивные данные (тикеры, стакан, история цен) при запуске
+    # всегда прогреваются заново, поэтому логический счётчик tick(ticker)_id
+    # для НОВОЙ сессии всегда стартует с 0, даже если в снапшоте был
+    # сохранён больший tick_id.
+    if loaded_ticker_id > 0:
+        log_info(
+            f"📦 Загружен снапшот состояния (tick_id={loaded_ticker_id}), но стартовый ticker_id новой сессии = 0",
+            _LOG,
+        )
     else:
         log_info("📦 Снапшот не найден, старт с нуля", _LOG)
 
@@ -390,7 +400,7 @@ async def run_realtime_from_exchange(symbol: str | None = None) -> None:
     log_info(f"   - Биржа: {cfg.exchange_id}", _LOG)
     log_info(f"   - Режим: {mode_str}", _LOG)
     log_info(f"   - Окружение: {cfg.environment}", _LOG)
-    log_info(f"   - Стартовый ticker_id: {ticker_id}", _LOG)
+    log_info("   - Стартовый ticker_id: 0 (новая сессия)", _LOG)
     log_separator(_LOG)
 
     # === ЗАПУСК ТОРГОВОГО ЦИКЛА ===
@@ -405,7 +415,7 @@ async def run_realtime_from_exchange(symbol: str | None = None) -> None:
             context=context,
             cfg=cfg,
             symbol=active_symbol,
-            start_ticker_id=ticker_id,
+            start_ticker_id=0,
         )
     finally:
         orderbook_task.cancel()
