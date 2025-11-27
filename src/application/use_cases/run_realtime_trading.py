@@ -1,3 +1,4 @@
+import asyncio
 import time
 from typing import List
 
@@ -9,26 +10,39 @@ from src.domain.services.market_data.orderflow_simulator import (
 from src.domain.services.context.state import init_context
 from src.domain.interfaces.currency_pair_repository import ICurrencyPairRepository
 from src.infrastructure.repositories import InMemoryCurrencyPairRepository
-from src.config.config import load_config
+from src.config.config import load_config, AppConfig
 from src.application.context import build_context
 from src.application.services.tick_pipeline_service import TickPipelineService
 from src.application.services.state_snapshot_service import StateSnapshotService
 from src.infrastructure.state.file_state_snapshot_store import FileStateSnapshotStore
+from src.domain.services.tick.tick_source import TickSource
+from src.infrastructure.connectors.ccxt_pro_exchange_connector import (
+    CcxtProExchangeConnector,
+)
+from src.application.workers.order_book_refresh_worker import (
+    order_book_refresh_worker,
+)
 
-def run(
+
+def run_demo_offline(
     pair_repository: ICurrencyPairRepository | None = None,
     *,
     symbol: str | None = None,
 ) -> None:
-    """Запуск упрощённого тикового конвейера.
+    """Синхронный демо‑режим без сети поверх ``generate_ticks``.
 
-    Последовательность стадий:
-    TickSource -> Indicators -> Strategies -> Orchestrator -> Execution.
+    Этот сценарий **не обращается к реальной бирже** и полностью
+    изолирует симуляцию рынка внутри процесса.
+
+    Используются:
+
+    * ``generate_ticks`` – фейковый генератор тиков;
+    * ``update_orderflow_from_tick`` – симуляция стакана/ордерфлоу;
+    * ``TickPipelineService`` – чистый конвейер обработки тика;
+    * ``StateSnapshotService`` – загрузка/сохранение состояния.
 
     На уровне приложения прототип обслуживает **ровно одну** валютную
-    пару. Наружу она всегда передаётся через параметр
-    ``symbol="BTC/USDT"``. Поддержка списков ``symbols`` на этом уровне
-    полностью убрана.
+    пару, которая передаётся через параметр ``symbol="BTC/USDT"``.
     """
 
     setup_logging()
@@ -84,7 +98,7 @@ def run(
     # Main loop
     log_stage(
         "LOOP",
-        "🔄 Старт основного торгового цикла",
+        "🔄 Старт основного торгового цикла (offline demo)",
         max_ticks=cfg.max_ticks,
         tick_sleep_sec=cfg.tick_sleep_sec,
     )
@@ -160,5 +174,121 @@ def run(
     finally:
         # [STOP]
         elapsed = time.time() - start_ts
-        log_stage("STOP", "🛑  Остановка конвейера", total_ticks=tick_id, elapsed_sec=round(elapsed, 3))
+        log_stage(
+            "STOP",
+            "🛑  Остановка offline‑конвейера",
+            total_ticks=tick_id,
+            elapsed_sec=round(elapsed, 3),
+        )
+
+
+async def _run_order_book_refresh_worker(
+    connector: CcxtProExchangeConnector,
+    context: dict,
+    cfg: AppConfig,
+    *,
+    symbol: str,
+) -> None:
+    """Вспомогательная обёртка для запуска воркера стакана.
+
+    Выделена в отдельную функцию, чтобы её было проще подменять в
+    юнит‑тестах через monkeypatch.
+    """
+
+    market_caches = context.get("market_caches") or {}
+    market_cache = market_caches.get(symbol)
+    if market_cache is None:
+        raise RuntimeError(f"Market cache for symbol {symbol!r} not found in context")
+
+    await order_book_refresh_worker(
+        connector,
+        market_cache,
+        symbol,
+        cfg,
+    )
+
+
+async def run_realtime_from_exchange(symbol: str | None = None) -> None:
+    """Боевой async‑сценарий real‑time торговли от реальной биржи.
+
+    Использует ``CcxtProExchangeConnector`` + ``TickSource`` и
+    асинхронный воркер стакана. Внутри **нет** ``generate_ticks`` и
+    симулятора стакана; все данные приходят с биржи.
+    """
+
+    setup_logging()
+
+    cfg = load_config(symbol=symbol)
+    active_symbol = cfg.symbol
+
+    # Репозиторий пар и валидация активной пары
+    pair_repo = InMemoryCurrencyPairRepository.from_symbols([active_symbol])
+    pair = pair_repo.get_by_symbol(active_symbol)
+    if pair is None:
+        raise RuntimeError(f"Currency pair {active_symbol!r} is not configured")
+    if not pair.enabled:
+        raise RuntimeError(f"Currency pair {active_symbol!r} is disabled for trading")
+
+    log_stage(
+        "BOOT",
+        "Запуск боевого async‑конвейера",
+        environment=cfg.environment,
+        symbol=active_symbol,
+    )
+
+    # Контекст и снапшоты
+    context = init_context(cfg)
+    context = build_context(cfg, context, pair_repository=pair_repo)
+
+    snapshot_store = FileStateSnapshotStore()
+    snapshot_svc = StateSnapshotService(snapshot_store, cfg)
+    tick_id = snapshot_svc.load(context)
+
+    # Сетевой коннектор и источник тиков
+    connector = CcxtProExchangeConnector(cfg)
+    tick_source = TickSource(connector, symbol=active_symbol)
+
+    # Воркер стакана
+    orderbook_task = asyncio.create_task(
+        _run_order_book_refresh_worker(connector, context, cfg, symbol=active_symbol)
+    )
+
+    pipeline = TickPipelineService(cfg)
+    loop = asyncio.get_event_loop()
+    start_ts = loop.time()
+
+    try:
+        async for ticker in tick_source.stream():
+            tick_id += 1
+
+            price = float(ticker["last"])
+            ts = ticker["timestamp"] or int(loop.time() * 1000)
+
+            pipeline.process_tick(
+                context,
+                symbol=active_symbol,
+                tick_id=tick_id,
+                price=price,
+                ts=ts,
+            )
+
+            snapshot_svc.maybe_save(context, tick_id=tick_id)
+
+            if tick_id % 5 == 0:
+                elapsed = loop.time() - start_ts
+                tps = tick_id / elapsed if elapsed > 0 else 0.0
+                log_stage(
+                    "HEARTBEAT",
+                    "Конвейер жив",
+                    ticks=tick_id,
+                    tps=round(tps, 3),
+                )
+    finally:
+        orderbook_task.cancel()
+        try:
+            await orderbook_task
+        except asyncio.CancelledError:
+            pass
+
+        await connector.close()
 

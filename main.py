@@ -10,8 +10,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import sys
-from src.application.use_cases.run_realtime_trading import run
+from src.application.use_cases.run_realtime_trading import (
+    run_demo_offline,
+    run_realtime_from_exchange,
+)
 
 
 def _parse_cli_pair(argv: list[str]) -> str:
@@ -42,9 +46,11 @@ if __name__ == "__main__":  # pragma: no cover - сценарий запуска
 
     try:
         cli_symbol = _parse_cli_pair(sys.argv)
-        # В прототипе один процесс обслуживает одну пару, поэтому
-        # передаём одиночный symbol в use-case.
-        run(symbol=cli_symbol)
+
+        # Пока боевой async‑сценарий не включён по умолчанию, точка
+        # входа использует offline‑демо‑режим. Выбор режима по
+        # аргументу командной строки может быть добавлен отдельным ТЗ.
+        run_demo_offline(symbol=cli_symbol)
     except KeyboardInterrupt:
         log_stage("WARN", "Прерывание работы по Ctrl+C")
         sys.exit(0)
