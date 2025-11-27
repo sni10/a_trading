@@ -13,7 +13,7 @@ from src.domain.services.indicators.indicator_engine import compute_indicators
 from src.domain.services.strategies.strategy_hub import evaluate_strategies
 from src.domain.services.orchestrator.orchestrator import decide
 from src.domain.services.execution.execution_service import execute
-from src.infrastructure.logging.logging_setup import log_stage
+from src.infrastructure.logging.logging_setup import log_info
 
 
 class TickPipelineService:
@@ -25,6 +25,10 @@ class TickPipelineService:
 
     Важно: внутри нет внешнего I/O, работы с снапшотами, сетью или файлами.
     Всё ограничивается чистой обработкой in-memory контекста.
+
+    Логирование:
+    - НЕ логируем каждый тик (это засоряет логи)
+    - Логируем только важные события: сигналы к действию (не HOLD)
     """
 
     def __init__(self, cfg: AppConfig) -> None:
@@ -53,18 +57,8 @@ class TickPipelineService:
             context, tick_id=tick_id, symbol=symbol, price=price
         )
 
-        # CTX: логический шаг подготовки контекста для стратегий.
-        # Логика остаётся прежней, только перенесена из демо‑цикла.
-        positions = context.get("positions") or []
-        has_ind = bool(indicators)
-        log_stage(
-            "CTX",
-            "🧠  Сбор контекста для стратегий",
-            tick_id=tick_id,
-            symbol=symbol,
-            has_ind=has_ind,
-            positions=len(positions),
-        )
+        # CTX: подготовка контекста для стратегий (без лога на каждый тик).
+        # positions = context.get("positions") or []
 
         # STRAT: оценка стратегий и формирование intents.
         intents = evaluate_strategies(context, tick_id=tick_id, symbol=symbol)
@@ -75,16 +69,13 @@ class TickPipelineService:
         record_decision(context, symbol=symbol, decision=decision)
 
         # EXEC: выполнение торгового решения.
+        # Логируем только если есть реальное действие (не HOLD).
         action = decision.get("action")
-        if action != "HOLD":
+        if action and action != "HOLD":
             execute(decision, context, tick_id=tick_id, symbol=symbol)
-        else:
-            log_stage(
-                "EXEC",
-                "⚙️ HOLD: заявки в биржу не отправляются",
-                tick_id=tick_id,
-                symbol=symbol,
-                action=action,
+            # Лог важного события - сигнал к действию
+            log_info(
+                f"🎯 Сигнал {action} | Тик {tick_id} | {symbol} | Цена: {price:.8f}"
             )
 
         # STATE: обновление агрегированных метрик по конвейеру.
