@@ -70,11 +70,11 @@ class IIndicatorStore(Protocol):
     medium_interval: int
     heavy_interval: int
 
-    def should_update_fast(self, tick_id: int) -> bool:
+    def should_update_fast(self, ticker_id: int) -> bool:
         """Нужно ли обновить быстрые индикаторы на этом тике."""
 
-    def should_update_medium(self, tick_id: int) -> bool:
+    def should_update_medium(self, ticker_id: int) -> bool:
         """Нужно ли обновить средние индикаторы на этом тике."""
 
-    def should_update_heavy(self, tick_id: int) -> bool:
+    def should_update_heavy(self, ticker_id: int) -> bool:
         """Нужно ли обновить тяжёлые индикаторы на этом тике."""

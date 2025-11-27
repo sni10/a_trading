@@ -1,52 +1,82 @@
+import asyncio
 import time
 from typing import List
 
-from src.infrastructure.logging.logging_setup import setup_logging, log_stage
-from src.domain.services.market_data.tick_source import generate_ticks
-from src.domain.services.context.state import init_context, update_metrics
-from src.domain.services.indicators.indicator_engine import compute_indicators
-from src.domain.services.strategies.strategy_hub import evaluate_strategies
-from src.domain.services.orchestrator.orchestrator import decide
-from src.domain.services.execution.execution_service import execute
+from src.infrastructure.logging.logging_setup import (
+    setup_logging,
+    log_stage,
+    log_info,
+    log_warning,
+    log_separator,
+    log_stat_block,
+)
+
+# Имя логгера для этого модуля (используется во всех вызовах log_*)
+_LOG = __name__
+from src.domain.services.market_data.ticker_source import generate_ticks
+from src.domain.services.context.state import init_context
 from src.domain.interfaces.currency_pair_repository import ICurrencyPairRepository
 from src.infrastructure.repositories import InMemoryCurrencyPairRepository
-from src.config.config import load_config
+from src.config.config import load_config, AppConfig
 from src.application.context import build_context
+from src.application.services.ticker_pipeline_service import TickPipelineService
+from src.application.services.state_snapshot_service import StateSnapshotService
+from src.infrastructure.state.file_state_snapshot_store import FileStateSnapshotStore
+from src.domain.services.ticker.ticker_source import TickSource
+from src.infrastructure.connectors.ccxt_pro_exchange_connector import (
+    CcxtProExchangeConnector,
+)
+from src.application.workers.order_book_refresh_worker import (
+    order_book_refresh_worker,
+)
 
-def run(
-    max_ticks: int = 10,
-    tick_sleep_sec: float = 0.5,
+# Версия прототипа
+__version__ = "0.1.0"
+
+# Интервал логирования статистики (каждые N тиков)
+TICKER_LOG_INTERVAL = 10
+
+
+def run_demo_offline(
     pair_repository: ICurrencyPairRepository | None = None,
     *,
     symbol: str | None = None,
 ) -> None:
-    """Запуск упрощённого тикового конвейера.
+    """
+    !!! DEPRECATED !!! DEPRECATED !!! DEPRECATED !!!
+    
+    Синхронный демо‑режим без сети поверх ``generate_ticks``.
 
-    Последовательность стадий:
-    TickSource -> Indicators -> Strategies -> Orchestrator -> Execution.
+    Этот сценарий **не обращается к реальной бирже** и полностью
+    изолирует симуляцию рынка внутри процесса.
+
+    Используются:
+
+    * ``generate_ticks`` – фейковый генератор тиков;
+    * ``update_orderflow_from_tick`` – симуляция стакана/ордерфлоу;
+    * ``TickPipelineService`` – чистый конвейер обработки тика;
+    * ``StateSnapshotService`` – загрузка/сохранение состояния.
 
     На уровне приложения прототип обслуживает **ровно одну** валютную
-    пару. Наружу она всегда передаётся через параметр
-    ``symbol="BTC/USDT"``. Поддержка списков ``symbols`` на этом уровне
-    полностью убрана.
+    пару, которая передаётся через параметр ``symbol="BTC/USDT"``.
     """
 
     setup_logging()
 
     # Инициализируем AppConfig из env + параметров run()
-    cfg = load_config(
-        symbol=symbol,
-        max_ticks=max_ticks,
-        tick_sleep_sec=tick_sleep_sec,
-    )
+    cfg = load_config(symbol=symbol)
 
     # Один процесс прототипа обслуживает ровно одну валютную пару.
     active_symbol = cfg.symbol
+
+    # === СТАРТОВЫЙ БЛОК ===
+    log_info(f"🚀 ЗАПУСК AlgoTrade Prototype v{__version__} (OFFLINE DEMO) для {active_symbol}", _LOG)
 
     # Репозиторий пар: либо передан снаружи (в будущем — обёртка над БД),
     # либо создаём in-memory репозиторий из одного символа конфига.
     if pair_repository is None:
         pair_repository = InMemoryCurrencyPairRepository.from_symbols([cfg.symbol])
+    log_info(f"✅ InMemoryCurrencyPairRepository создан для {cfg.symbol}", _LOG)
 
     pair = pair_repository.get_by_symbol(active_symbol)
     if pair is None:
@@ -54,113 +84,346 @@ def run(
     if not pair.enabled:
         raise RuntimeError(f"Currency pair {active_symbol!r} is disabled for trading")
 
-    # [BOOT]
-    log_stage(
-        "BOOT",
-        "Запуск демо‑конвейера",
-        environment=cfg.environment,
-        symbol=cfg.symbol,
-    )
+    log_info(f"✅ Валютная пара {active_symbol} загружена и активна", _LOG)
 
     # Базовый dict‑контекст на основе типизированного AppConfig
     context = init_context(cfg)
+    log_info("✅ Базовый контекст инициализирован (init_context)", _LOG)
 
     # Обогащаем контекст CurrencyPair и in-memory кэшами, используя
     # репозиторий пар как единственный источник правды.
     context = build_context(cfg, context, pair_repository=pair_repository)
+    log_info("✅ Контекст обогащён кэшами и CurrencyPair (build_context)", _LOG)
 
-    # [LOAD]
-    log_stage(
-        "LOAD",
-        "📦 Загрузка state (пока мок: пары/ордера/позиции из памяти)",
-        symbol=cfg.symbol,
-        orders=0,
-        positions=0,
-    )
+    # --- Загрузка state из снапшота (если есть) ---
+    snapshot_store = FileStateSnapshotStore()
+    snapshot_svc = StateSnapshotService(snapshot_store, cfg)
+    loaded_ticker_id = snapshot_svc.load(context)
 
-    # [WARMUP]
-    log_stage(
-        "WARMUP",
-        "🔥 Прогрев индикаторов и стаканов (исторические данные, OHLCV)",
-        indicator_fast_interval=cfg.indicator_fast_interval,
-        indicator_medium_interval=cfg.indicator_medium_interval,
-        indicator_heavy_interval=cfg.indicator_heavy_interval,
-    )
+    if loaded_ticker_id > 0:
+        log_info(f"📦 Загружен снапшот состояния, ticker_id={loaded_ticker_id}", _LOG)
+    else:
+        log_info("📦 Снапшот не найден, старт с нуля", _LOG)
 
-    # Main loop
-    log_stage("LOOP", "🔄 Старт основного торгового цикла", max_ticks=cfg.max_ticks, tick_sleep_sec=cfg.tick_sleep_sec)
+    # Прогрев
+    log_info("🔥 Прогрев индикаторов и стаканов (исторические данные, OHLCV)", _LOG)
+    log_info(f"   - fast_interval: {cfg.indicator_fast_interval}", _LOG)
+    log_info(f"   - medium_interval: {cfg.indicator_medium_interval}", _LOG)
+    log_info(f"   - heavy_interval: {cfg.indicator_heavy_interval}", _LOG)
+
+    # Единый конвейер обработки одного тика без I/O.
+    pipeline = TickPipelineService(cfg)
+    log_info("✅ Конвейер обработки тиков создан (TickPipelineService)", _LOG)
+
+    # === СВОДКА ГОТОВНОСТИ СИСТЕМЫ ===
+    log_separator(_LOG)
+    log_info("🚀 СИСТЕМА ГОТОВА К ЗАПУСКУ (OFFLINE DEMO)", _LOG)
+    log_info(f"   - Валютная пара: {active_symbol}", _LOG)
+    log_info(f"   - Окружение: {cfg.environment}", _LOG)
+    log_info(f"   - Максимум тиков: {cfg.max_ticks}", _LOG)
+    log_info(f"   - Задержка между тиками: {cfg.ticker_sleep_sec} сек", _LOG)
+    log_info(f"   - Стартовый ticker_id: {loaded_ticker_id}", _LOG)
+    log_separator(_LOG)
+
+    # === ЗАПУСК ТОРГОВОГО ЦИКЛА ===
+    log_info("🔄 Начинаем основной торговый цикл (offline demo)...", _LOG)
 
     start_ts = time.time()
-    tick_id = 0
+    ticker_id = loaded_ticker_id
+    last_price = 0.0
+
+    # Статистика для периодических сводок
+    ticker_times: list[float] = []
+
+    # Локальный импорт симулятора стакана, чтобы он не «подтягивался»
+    # в модульный scope и не был доступен боевому сценарию
+    # run_realtime_from_exchange.
+    from src.domain.services.market_data.orderflow_simulator import (
+        update_orderflow_from_tick,
+    )
 
     try:
-        for tick in generate_ticks(
-            cfg.symbol, max_ticks=cfg.max_ticks, sleep_sec=cfg.tick_sleep_sec
+        for ticker in generate_ticks(
+            cfg.symbol, max_ticks=cfg.max_ticks, sleep_sec=cfg.ticker_sleep_sec
         ):
-            tick_id += 1
-            symbol = tick["symbol"]
-            price = tick["price"]
+            ticker_start = time.time()
+            ticker_id += 1
+            symbol = ticker["symbol"]
+            price = ticker["price"]
+            last_price = price
+            ts = ticker["ts"]
 
-            # [TICK]
-            log_stage("TICK", "📈  Тик получен", tick_id=tick_id, symbol=symbol, price=price)
-
-            # [FEEDS]
-            log_stage(
-                "FEEDS",
-                "🌐  Обновление market‑кэша по тикеру",
-                tick_id=tick_id,
+            # Симуляция стакана/ордерфлоу (только для демо)
+            update_orderflow_from_tick(
+                context,
                 symbol=symbol,
-            )
-            context["market"][symbol] = {"last_price": price, "ts": tick["ts"]}
-
-            # [IND]
-            indicators = compute_indicators(context, tick_id=tick_id, symbol=symbol, price=price)
-            context["indicators"][symbol] = indicators
-
-            # [CTX]
-            log_stage(
-                "CTX",
-                "🧠  Сбор контекста для стратегий",
-                tick_id=tick_id,
-                symbol=symbol,
-                has_ind=True,
-                positions=len(context["positions"]),
+                price=price,
+                ts=ts,
             )
 
-            # [STRAT]
-            intents = evaluate_strategies(context, tick_id=tick_id, symbol=symbol)
+            # Весь остальной конвейер по тику выполняет TickPipelineService.
+            pipeline.process_tick(
+                context,
+                symbol=symbol,
+                ticker_id=ticker_id,
+                price=price,
+                ts=ts,
+            )
 
-            # [ORCH]
-            decision = decide(intents, context, tick_id=tick_id, symbol=symbol)
+            # Периодическое сохранение снапшота во внешнее хранилище
+            snapshot_svc.maybe_save(context, ticker_id=ticker_id)
 
-            # [EXEC]
-            if decision.get("action") != "HOLD":
-                execute(decision, context, tick_id=tick_id, symbol=symbol)
-            else:
-                log_stage(
-                    "EXEC",
-                    "⚙️ HOLD: заявки в биржу не отправляются",
-                    tick_id=tick_id,
-                    symbol=symbol,
-                    action=decision.get("action"),
+            # Замер времени обработки
+            ticker_elapsed = (time.time() - ticker_start) * 1000  # ms
+            ticker_times.append(ticker_elapsed)
+
+            # Периодическая сводка каждые TICKER_LOG_INTERVAL тиков
+            if ticker_id % TICKER_LOG_INTERVAL == 0:
+                elapsed = time.time() - start_ts
+                tps = ticker_id / elapsed if elapsed > 0 else 0.0
+                avg_time = sum(ticker_times) / len(ticker_times) if ticker_times else 0.0
+                min_time = min(ticker_times) if ticker_times else 0.0
+                max_time = max(ticker_times) if ticker_times else 0.0
+
+                log_info(
+                    f"📊 Тик {ticker_id} | Цена: {price:.8f} | "
+                    f"TPS: {tps:.1f} | Среднее время: {avg_time:.1f}ms | "
+                    f"Мин/Макс: {min_time:.1f}/{max_time:.1f}ms",
+                    _LOG
                 )
 
-            # [STATE]
-            update_metrics(context, tick_id=tick_id)
-
-            # [HEARTBEAT]
-            if tick_id % 5 == 0:
-                elapsed = time.time() - start_ts
-                tps = tick_id / elapsed if elapsed > 0 else 0.0
-                log_stage("HEARTBEAT", "💓  Конвейер жив", ticks=tick_id, tps=round(tps, 3))
+                # Сбрасываем статистику для следующего интервала
+                ticker_times.clear()
 
     except KeyboardInterrupt:
-        log_stage("WARN", "Прерывание по Ctrl+C", tick_id=tick_id)
+        log_warning(f"⚠️ Прерывание по Ctrl+C на тике {ticker_id}", _LOG)
     except Exception as exc:
-        log_stage("ERROR", "Критическая ошибка в торговом цикле", tick_id=tick_id, error=str(exc), error_type=type(exc).__name__)
+        log_warning(f"❌ Критическая ошибка в торговом цикле: {type(exc).__name__}: {exc}", _LOG)
         raise
     finally:
-        # [STOP]
+        # Финальная сводка при остановке
         elapsed = time.time() - start_ts
-        log_stage("STOP", "🛑  Остановка конвейера", total_ticks=tick_id, elapsed_sec=round(elapsed, 3))
+        log_separator(_LOG)
+        log_info(f"🛑 Остановка offline-конвейера для {active_symbol}", _LOG)
+        log_info(f"   - Всего тиков обработано: {ticker_id}", _LOG)
+        log_info(f"   - Последняя цена: {last_price:.8f}", _LOG)
+        log_info(f"   - Время работы: {elapsed:.1f} сек", _LOG)
+        if elapsed > 0:
+            log_info(f"   - Средний TPS: {ticker_id / elapsed:.2f}", _LOG)
+        log_separator(_LOG)
+
+
+async def _run_order_book_refresh_worker(
+    connector: CcxtProExchangeConnector,
+    context: dict,
+    cfg: AppConfig,
+    *,
+    symbol: str,
+) -> None:
+    """Вспомогательная обёртка для запуска воркера стакана.
+
+    Выделена в отдельную функцию, чтобы её было проще подменять в
+    юнит‑тестах через monkeypatch.
+    """
+
+    market_caches = context.get("market_caches") or {}
+    market_cache = market_caches.get(symbol)
+    if market_cache is None:
+        raise RuntimeError(f"Market cache for symbol {symbol!r} not found in context")
+
+    await order_book_refresh_worker(
+        connector,
+        market_cache,
+        symbol,
+        cfg,
+    )
+
+
+async def _run_realtime_core(
+    *,
+    ticker_source: TickSource,
+    pipeline: TickPipelineService,
+    snapshot_svc: StateSnapshotService,
+    context: dict,
+    cfg: AppConfig,
+    symbol: str,
+    start_ticker_id: int,
+) -> None:
+    """Core‑цикл async‑конвейера поверх абстрактного источника тиков.
+
+    Вынесен в отдельную функцию, чтобы его можно было
+    тестировать через фейковые ``ticker_source`` / ``snapshot_svc`` /
+    ``pipeline`` **без** реальных сетевых подключений и CCXT.
+
+    Логирование:
+    - НЕ логируем каждый тик (это засоряет логи)
+    - Логируем сводку каждые TICKER_LOG_INTERVAL тиков в формате bad_example:
+      ``📊 Тик 100 | Цена: 0.45800000 | TPS: 0.9 | Среднее время: 0.0ms``
+    """
+
+    loop = asyncio.get_event_loop()
+    start_ts = loop.time()
+    ticker_id = start_ticker_id
+    last_price = 0.0
+
+    # Статистика для периодических сводок
+    ticker_times: list[float] = []
+
+    try:
+        async for ticker in ticker_source.stream():
+            ticker_start = loop.time()
+            ticker_id += 1
+
+            price = float(ticker["last"])
+            last_price = price
+            ts = ticker["timestamp"] or int(loop.time() * 1000)
+
+            # Обработка тика через конвейер (без отдельного лога на каждый тик)
+            pipeline.process_tick(
+                context,
+                symbol=symbol,
+                ticker_id=ticker_id,
+                price=price,
+                ts=ts,
+            )
+
+            snapshot_svc.maybe_save(context, ticker_id=ticker_id)
+
+            # Замер времени обработки
+            ticker_elapsed = (loop.time() - ticker_start) * 1000  # ms
+            ticker_times.append(ticker_elapsed)
+
+            # Периодическая сводка каждые TICKER_LOG_INTERVAL тиков
+            # Формат как в bad_example:
+            # 📊 Тик 100 | Цена: 0.45800000 | TPS: 0.9 | Среднее время: 0.0ms | Мин/Макс: 0.0/1.6ms
+            if ticker_id % TICKER_LOG_INTERVAL == 0:
+                elapsed = loop.time() - start_ts
+                tps = ticker_id / elapsed if elapsed > 0 else 0.0
+                avg_time = sum(ticker_times) / len(ticker_times) if ticker_times else 0.0
+                min_time = min(ticker_times) if ticker_times else 0.0
+                max_time = max(ticker_times) if ticker_times else 0.0
+
+                log_info(
+                    f"📊 Тик {ticker_id} | Цена: {price:.8f} | "
+                    f"TPS: {tps:.1f} | Среднее время: {avg_time:.1f}ms | "
+                    f"Мин/Макс: {min_time:.1f}/{max_time:.1f}ms",
+                    _LOG
+                )
+
+                # Сбрасываем статистику для следующего интервала
+                ticker_times.clear()
+
+    finally:
+        # Финальная сводка при остановке
+        elapsed = loop.time() - start_ts
+        log_separator(_LOG)
+        log_info(f"🛑 Остановка realtime-конвейера для {symbol}", _LOG)
+        log_info(f"   - Всего тиков обработано: {ticker_id}", _LOG)
+        log_info(f"   - Последняя цена: {last_price:.8f}", _LOG)
+        log_info(f"   - Время работы: {elapsed:.1f} сек", _LOG)
+        if elapsed > 0:
+            log_info(f"   - Средний TPS: {ticker_id / elapsed:.2f}", _LOG)
+        log_separator(_LOG)
+
+
+async def run_realtime_from_exchange(symbol: str | None = None) -> None:
+    """Боевой async‑сценарий real‑time торговли от реальной биржи.
+
+    Использует ``CcxtProExchangeConnector`` + ``TickSource`` и
+    асинхронный воркер стакана. Внутри **нет** ``generate_ticks`` и
+    симулятора стакана; все данные приходят с биржи.
+    """
+
+    setup_logging()
+
+    cfg = load_config(symbol=symbol)
+    active_symbol = cfg.symbol
+
+    # === СТАРТОВЫЙ БЛОК (как в bad_example) ===
+    log_info(f"🚀 ЗАПУСК AlgoTrade Prototype v{__version__} для {active_symbol}", _LOG)
+
+    # Репозиторий пар и валидация активной пары
+    pair_repo = InMemoryCurrencyPairRepository.from_symbols([active_symbol])
+    log_info(f"✅ InMemoryCurrencyPairRepository создан для {active_symbol}", _LOG)
+    
+    pair = pair_repo.get_by_symbol(active_symbol)
+    if pair is None:
+        raise RuntimeError(f"Currency pair {active_symbol!r} is not configured")
+    if not pair.enabled:
+        raise RuntimeError(f"Currency pair {active_symbol!r} is disabled for trading")
+
+    log_info(f"✅ Валютная пара {active_symbol} загружена и активна", _LOG)
+
+    # Контекст и снапшоты
+    context = init_context(cfg)
+    log_info("✅ Базовый контекст инициализирован (init_context)", _LOG)
+    
+    context = build_context(cfg, context, pair_repository=pair_repo)
+    log_info("✅ Контекст обогащён кэшами и CurrencyPair (build_context)", _LOG)
+
+    snapshot_store = FileStateSnapshotStore()
+    snapshot_svc = StateSnapshotService(snapshot_store, cfg)
+    loaded_ticker_id = snapshot_svc.load(context)
+
+    # Важно: реактивные данные (тикеры, стакан, история цен) при запуске
+    # всегда прогреваются заново, поэтому логический счётчик tick(ticker)_id
+    # для НОВОЙ сессии всегда стартует с 0, даже если в снапшоте был
+    # сохранён больший tick_id.
+    if loaded_ticker_id > 0:
+        log_info(
+            f"📦 Загружен снапшот состояния (tick_id={loaded_ticker_id}), но стартовый ticker_id новой сессии = 0",
+            _LOG,
+        )
+    else:
+        log_info("📦 Снапшот не найден, старт с нуля", _LOG)
+
+    # Сетевой коннектор и источник тиков
+    connector = CcxtProExchangeConnector(cfg)
+    ticker_source = TickSource(connector, symbol=active_symbol)
+
+    mode_str = "Sandbox" if cfg.sandbox_mode else "Production"
+    log_info(f"✅ Коннектор инициализирован ({cfg.exchange_id}, {mode_str})", _LOG)
+
+    # Воркер стакана
+    orderbook_task = asyncio.create_task(
+        _run_order_book_refresh_worker(connector, context, cfg, symbol=active_symbol)
+    )
+    log_info("✅ Воркер стакана запущен", _LOG)
+
+    pipeline = TickPipelineService(cfg)
+    log_info("✅ Конвейер обработки тиков создан (TickPipelineService)", _LOG)
+
+    # === СВОДКА ГОТОВНОСТИ СИСТЕМЫ ===
+    log_separator(_LOG)
+    log_info("🚀 СИСТЕМА ГОТОВА К ЗАПУСКУ ТОРГОВЛИ", _LOG)
+    log_info(f"   - Валютная пара: {active_symbol}", _LOG)
+    log_info(f"   - Биржа: {cfg.exchange_id}", _LOG)
+    log_info(f"   - Режим: {mode_str}", _LOG)
+    log_info(f"   - Окружение: {cfg.environment}", _LOG)
+    log_info("   - Стартовый ticker_id: 0 (новая сессия)", _LOG)
+    log_separator(_LOG)
+
+    # === ЗАПУСК ТОРГОВОГО ЦИКЛА ===
+    log_info("🔄 Начинаем основной торговый цикл...", _LOG)
+    log_info(f"🎯 Подключаемся к тикеру для символа: {active_symbol}", _LOG)
+
+    try:
+        await _run_realtime_core(
+            ticker_source=ticker_source,
+            pipeline=pipeline,
+            snapshot_svc=snapshot_svc,
+            context=context,
+            cfg=cfg,
+            symbol=active_symbol,
+            start_ticker_id=0,
+        )
+    finally:
+        orderbook_task.cancel()
+        try:
+            await orderbook_task
+        except asyncio.CancelledError:
+            pass
+
+        await connector.close()
+        log_info("🛑 Коннектор закрыт, система остановлена", _LOG)
 

@@ -13,6 +13,7 @@ from typing import Any, Deque, Dict, List
 from src.config.config import AppConfig
 from src.domain.entities.currency_pair import CurrencyPair
 from src.domain.interfaces.cache import IIndicatorStore, IMarketCache
+from src.infrastructure.logging.logging_setup import log_stage
 
 
 class InMemoryMarketCache(IMarketCache):
@@ -36,12 +37,28 @@ class InMemoryMarketCache(IMarketCache):
             maxlen=pair.trades_history_size
         )
 
+        log_stage(
+            "BOOT",
+            "Инициализация InMemoryMarketCache",
+            symbol=self.symbol,
+            bar_window_size=pair.bar_window_size,
+            trades_history_size=pair.trades_history_size,
+            orderbook_depth=pair.orderbook_depth,
+        )
+
     # --- Ticker ---
 
     def update_ticker(self, ticker: Dict[str, Any]) -> None:  # type: ignore[override]
         if "symbol" not in ticker:
             ticker = {**ticker, "symbol": self.symbol}
         self._ticker = ticker
+        log_stage(
+            "FEEDS",
+            "Обновлён тикер в InMemoryMarketCache",
+            symbol=self.symbol,
+            last=ticker.get("last"),
+            timestamp=ticker.get("timestamp"),
+        )
 
     def get_ticker(self) -> Dict[str, Any] | None:  # type: ignore[override]
         return self._ticker
@@ -62,6 +79,15 @@ class InMemoryMarketCache(IMarketCache):
         }
         self._orderbook = trimmed
 
+        log_stage(
+            "FEEDS",
+            "Стакан обновлён в InMemoryMarketCache",
+            symbol=self.symbol,
+            bids=len(trimmed["bids"]),
+            asks=len(trimmed["asks"]),
+            depth=depth,
+        )
+
     def get_orderbook(self) -> Dict[str, Any] | None:  # type: ignore[override]
         return self._orderbook
 
@@ -69,6 +95,14 @@ class InMemoryMarketCache(IMarketCache):
 
     def add_trade(self, trade: Dict[str, Any]) -> None:  # type: ignore[override]
         self._trades.append(trade)
+        log_stage(
+            "FEEDS",
+            "Добавлен трейд в историю InMemoryMarketCache",
+            symbol=self.symbol,
+            price=trade.get("price"),
+            trades_len=len(self._trades),
+            window=self.pair.trades_history_size,
+        )
 
     def get_trades(self, limit: int | None = None) -> List[Dict[str, Any]]:  # type: ignore[override]
         items = list(self._trades)
@@ -80,6 +114,14 @@ class InMemoryMarketCache(IMarketCache):
 
     def add_bar(self, bar: Dict[str, Any]) -> None:  # type: ignore[override]
         self._bars.append(bar)
+        log_stage(
+            "FEEDS",
+            "Добавлен бар в историю InMemoryMarketCache",
+            symbol=self.symbol,
+            close=bar.get("close"),
+            bars_len=len(self._bars),
+            window=self.pair.bar_window_size,
+        )
 
     def get_bars(self, limit: int | None = None) -> List[Dict[str, Any]]:  # type: ignore[override]
         items = list(self._bars)
@@ -110,19 +152,29 @@ class InMemoryIndicatorStore(IIndicatorStore):
         self.medium_history: Deque[float] = deque(maxlen=maxlen)
         self.heavy_history: Deque[float] = deque(maxlen=maxlen)
 
+        log_stage(
+            "BOOT",
+            "Инициализация InMemoryIndicatorStore",
+            symbol=pair.symbol,
+            indicator_window_size=maxlen,
+            fast_interval=self.fast_interval,
+            medium_interval=self.medium_interval,
+            heavy_interval=self.heavy_interval,
+        )
+
     # --- Политика обновления ---
 
-    def _should_update(self, interval: int, tick_id: int) -> bool:
-        return interval > 0 and tick_id % interval == 0
+    def _should_update(self, interval: int, ticker_id: int) -> bool:
+        return interval > 0 and ticker_id % interval == 0
 
-    def should_update_fast(self, tick_id: int) -> bool:  # type: ignore[override]
-        return self._should_update(self.fast_interval, tick_id)
+    def should_update_fast(self, ticker_id: int) -> bool:  # type: ignore[override]
+        return self._should_update(self.fast_interval, ticker_id)
 
-    def should_update_medium(self, tick_id: int) -> bool:  # type: ignore[override]
-        return self._should_update(self.medium_interval, tick_id)
+    def should_update_medium(self, ticker_id: int) -> bool:  # type: ignore[override]
+        return self._should_update(self.medium_interval, ticker_id)
 
-    def should_update_heavy(self, tick_id: int) -> bool:  # type: ignore[override]
-        return self._should_update(self.heavy_interval, tick_id)
+    def should_update_heavy(self, ticker_id: int) -> bool:  # type: ignore[override]
+        return self._should_update(self.heavy_interval, ticker_id)
 
 
 __all__ = [

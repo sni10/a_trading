@@ -10,8 +10,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import sys
-from src.application.use_cases.run_realtime_trading import run
+from src.application.use_cases.run_realtime_trading import (
+    run_demo_offline,
+    run_realtime_from_exchange,
+)
 
 
 def _parse_cli_pair(argv: list[str]) -> str:
@@ -37,17 +41,37 @@ def _parse_cli_pair(argv: list[str]) -> str:
     return symbol
 
 
-if __name__ == "__main__":  # pragma: no cover - сценарий запуска
+def _run_cli(argv: list[str]) -> None:
+    """Запуск CLI-энтрипойнта для одной валютной пары.
+
+    На данном этапе по умолчанию используется **боевой async‑сценарий**
+    :func:`run_realtime_from_exchange`, который обрабатывает тики от
+    реальной биржи. Вызов обёрнут в :func:`asyncio.run`, чтобы корутина
+    была корректно «дождена» и не порождала предупреждений времени
+    выполнения.
+    """
+
     from src.infrastructure.logging.logging_setup import log_stage
 
     try:
-        cli_symbol = _parse_cli_pair(sys.argv)
-        # В прототипе один процесс обслуживает одну пару, поэтому
-        # передаём одиночный symbol в use-case.
-        run(symbol=cli_symbol)
+        cli_symbol = _parse_cli_pair(argv)
+
+        # В текущей версии прототипа точка входа запускает боевой
+        # async‑сценарий real‑time торговли. Выбор режима (offline/online)
+        # по отдельному аргументу можно добавить отдельным ТЗ.
+        asyncio.run(run_realtime_from_exchange(symbol=cli_symbol))
     except KeyboardInterrupt:
         log_stage("WARN", "Прерывание работы по Ctrl+C")
         sys.exit(0)
     except Exception as exc:
-        log_stage("ERROR", "Критическая ошибка в main()", error=str(exc), error_type=type(exc).__name__)
+        log_stage(
+            "ERROR",
+            "Критическая ошибка в main()",
+            error=str(exc),
+            error_type=type(exc).__name__,
+        )
         sys.exit(1)
+
+
+if __name__ == "__main__":  # pragma: no cover - сценарий запуска
+    _run_cli(sys.argv)

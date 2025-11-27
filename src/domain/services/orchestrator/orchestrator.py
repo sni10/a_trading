@@ -1,9 +1,12 @@
 from typing import Dict, Any, List
 
-from src.infrastructure.logging.logging_setup import log_stage
+from src.infrastructure.logging.logging_setup import log_info
+
+# Имя логгера для этого модуля
+_LOG = __name__
 
 
-def decide(intents: List[Dict[str, Any]], context: Dict[str, Any], *, tick_id: int, symbol: str) -> Dict[str, Any]:
+def decide(intents: List[Dict[str, Any]], context: Dict[str, Any], *, ticker_id: int, symbol: str) -> Dict[str, Any]:
     """Простейший оркестратор принятия решения по intents.
 
     Контракт (на текущем этапе прототипа):
@@ -42,15 +45,13 @@ def decide(intents: List[Dict[str, Any]], context: Dict[str, Any], *, tick_id: i
 
     * Функция не делает сетевых запросов, не обращается к БД, не
       использует рандом и sleep — чистая бизнес‑логика на dict‑ах.
-    * Все побочные эффекты ограничены логированием через ``log_stage``.
+    * Логирование вынесено на уровень выше (TickPipelineService) -
+      логируются только важные события (сигналы к действию).
     """
 
-    log_stage(
-        "ORCH",
-        "Получен список intents от стратегий",
-        tick_id=tick_id,
-        symbol=symbol,
-        intents_count=len(intents),
+    log_info(
+        f"🧩 [ORCH] Получен список intents для обработки | ticker_id: {ticker_id} | symbol: {symbol} | intents_count: {len(intents)}",
+        _LOG
     )
 
     # Базовое решение: HOLD, если стратегий нет или все бездействуют.
@@ -100,13 +101,9 @@ def decide(intents: List[Dict[str, Any]], context: Dict[str, Any], *, tick_id: i
                     "ts": context.get("market", {}).get(symbol, {}).get("ts"),
                 }
 
-    log_stage(
-        "ORCH",
-        "Принято решение по intents",
-        tick_id=tick_id,
-        symbol=symbol,
-        action=decision.get("action"),
-        reason=decision.get("reason"),
+    log_info(
+        f"🧩 [ORCH] Решение принято | ticker_id: {ticker_id} | symbol: {symbol} | action: {decision.get('action')} | reason: {decision.get('reason')}",
+        _LOG
     )
     return decision
 
