@@ -8,20 +8,15 @@ from src.domain.services.market_data.orderflow_simulator import (
 )
 from src.domain.services.context.state import (
     init_context,
-    update_market_state,
-    update_metrics,
     apply_state_snapshot,
     make_state_snapshot,
 )
-from src.domain.services.indicators.indicator_engine import compute_indicators
-from src.domain.services.strategies.strategy_hub import evaluate_strategies
-from src.domain.services.orchestrator.orchestrator import decide
-from src.domain.services.execution.execution_service import execute
 from src.domain.interfaces.currency_pair_repository import ICurrencyPairRepository
 from src.infrastructure.repositories import InMemoryCurrencyPairRepository
 from src.config.config import load_config
 from src.application.context import build_context
 from src.infrastructure.state.file_state_snapshot_store import FileStateSnapshotStore
+from src.application.services.tick_pipeline_service import TickPipelineService
 
 def run(
     pair_repository: ICurrencyPairRepository | None = None,
@@ -107,10 +102,18 @@ def run(
     )
 
     # Main loop
-    log_stage("LOOP", "🔄 Старт основного торгового цикла", max_ticks=cfg.max_ticks, tick_sleep_sec=cfg.tick_sleep_sec)
+    log_stage(
+        "LOOP",
+        "🔄 Старт основного торгового цикла",
+        max_ticks=cfg.max_ticks,
+        tick_sleep_sec=cfg.tick_sleep_sec,
+    )
 
     start_ts = time.time()
     tick_id = loaded_tick_id
+
+    # Единый конвейер обработки одного тика без I/O.
+    pipeline = TickPipelineService(cfg)
 
     try:
         for tick in generate_ticks(
@@ -119,22 +122,23 @@ def run(
             tick_id += 1
             symbol = tick["symbol"]
             price = tick["price"]
+            ts = tick["ts"]
 
             # [TICK]
-            log_stage("TICK", "📈  Тик получен", tick_id=tick_id, symbol=symbol, price=price)
+            log_stage(
+                "TICK",
+                "📈  Тик получен",
+                tick_id=tick_id,
+                symbol=symbol,
+                price=price,
+            )
 
-            # [FEEDS]
+            # [FEEDS] + симуляция стакана/ордерфлоу остаются в демо‑режиме.
             log_stage(
                 "FEEDS",
                 "🌐  Обновление market‑состояния и кэша по тику",
                 tick_id=tick_id,
                 symbol=symbol,
-            )
-            update_market_state(
-                context,
-                symbol=symbol,
-                price=price,
-                ts=tick["ts"],
             )
 
             # Дополнительно симулируем стакан/трейды/бары поверх тика.
@@ -142,67 +146,36 @@ def run(
                 context,
                 symbol=symbol,
                 price=price,
-                ts=tick["ts"],
+                ts=ts,
             )
 
-            # [IND]
-            indicators = compute_indicators(
-                context, tick_id=tick_id, symbol=symbol, price=price
-            )
-
-            # [CTX]
-            log_stage(
-                "CTX",
-                "🧠  Сбор контекста для стратегий",
-                tick_id=tick_id,
+            # Весь остальной конвейер по тику выполняет TickPipelineService.
+            pipeline.process_tick(
+                context,
                 symbol=symbol,
-                has_ind=True,
-                positions=len(context["positions"]),
+                tick_id=tick_id,
+                price=price,
+                ts=ts,
             )
-
-            # [STRAT]
-            intents = evaluate_strategies(
-                context, tick_id=tick_id, symbol=symbol
-            )
-
-            # Сохраняем intents в контексте и истории для будущего анализа
-            # и возможной замены поставщика решений.
-            from src.domain.services.context.state import record_intents, record_decision
-
-            record_intents(context, symbol=symbol, intents=intents)
-
-            # [ORCH]
-            decision = decide(intents, context, tick_id=tick_id, symbol=symbol)
-
-            # Сохраняем принятое решение в состоянии/истории.
-            record_decision(context, symbol=symbol, decision=decision)
-
-            # [EXEC]
-            if decision.get("action") != "HOLD":
-                execute(decision, context, tick_id=tick_id, symbol=symbol)
-            else:
-                log_stage(
-                    "EXEC",
-                    "⚙️ HOLD: заявки в биржу не отправляются",
-                    tick_id=tick_id,
-                    symbol=symbol,
-                    action=decision.get("action"),
-                )
-
-            # [STATE]
-            update_metrics(context, tick_id=tick_id)
 
             # Периодическое сохранение снапшота во внешнее хранилище
             interval = getattr(cfg, "state_snapshot_interval_ticks", 0)
             if interval > 0 and tick_id % interval == 0:
-                snapshot = make_state_snapshot(context, symbol=symbol, tick_id=tick_id)
+                snapshot = make_state_snapshot(
+                    context, symbol=symbol, tick_id=tick_id
+                )
                 snapshot_store.save_snapshot(snapshot_key, snapshot)
 
             # [HEARTBEAT]
             if tick_id % 5 == 0:
                 elapsed = time.time() - start_ts
                 tps = tick_id / elapsed if elapsed > 0 else 0.0
-                log_stage("HEARTBEAT", "💓  Конвейер жив", ticks=tick_id, tps=round(tps, 3))
+                log_stage(
+                    "HEARTBEAT",
+                    "💓  Конвейер жив",
+                    ticks=tick_id,
+                    tps=round(tps, 3),
+                )
 
     except KeyboardInterrupt:
         log_stage("WARN", "Прерывание по Ctrl+C", tick_id=tick_id)
