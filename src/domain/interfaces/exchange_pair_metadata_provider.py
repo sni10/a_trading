@@ -21,7 +21,7 @@ class PairPrecisions(TypedDict):
     """Структура с прецизионами для валютной пары.
 
     * ``min_step`` – минимальный шаг количества (lot size step);
-    * ``price_step`` – минимальный шаг цены (tick size).
+    * ``price_step`` – минимальный шаг цены (ticker size).
     """
 
     min_step: float

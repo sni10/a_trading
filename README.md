@@ -81,7 +81,7 @@
 описанной в `doc/designing/GIUDELINE.md` и
 `bad_example/docs/architecture/FILE_STRUCTURE.md`.
 
-### 🔄 Tick Pipeline
+### 🔄 Ticker Pipeline
 
 Система следует последовательной архитектуре конвейера:
 
@@ -346,7 +346,7 @@ algorithmic_trading/
 │   │       ├── indicators/
 │   │       │   └── indicator_engine.py  # Fake indicators, logging
 │   │       ├── market_data/
-│   │       │   └── tick_source.py       # Tick generator (simulator)
+│   │       │   └── tick_source.py       # Ticker generator (simulator)
 │   │       ├── orchestrator/
 │   │       │   └── orchestrator.py      # Naïve orchestrator
 │   │       └── strategies/
