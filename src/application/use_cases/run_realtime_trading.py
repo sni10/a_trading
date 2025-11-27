@@ -6,17 +6,14 @@ from src.domain.services.market_data.tick_source import generate_ticks
 from src.domain.services.market_data.orderflow_simulator import (
     update_orderflow_from_tick,
 )
-from src.domain.services.context.state import (
-    init_context,
-    apply_state_snapshot,
-    make_state_snapshot,
-)
+from src.domain.services.context.state import init_context
 from src.domain.interfaces.currency_pair_repository import ICurrencyPairRepository
 from src.infrastructure.repositories import InMemoryCurrencyPairRepository
 from src.config.config import load_config
 from src.application.context import build_context
-from src.infrastructure.state.file_state_snapshot_store import FileStateSnapshotStore
 from src.application.services.tick_pipeline_service import TickPipelineService
+from src.application.services.state_snapshot_service import StateSnapshotService
+from src.infrastructure.state.file_state_snapshot_store import FileStateSnapshotStore
 
 def run(
     pair_repository: ICurrencyPairRepository | None = None,
@@ -72,25 +69,8 @@ def run(
 
     # --- Загрузка state из снапшота (если есть) ---
     snapshot_store = FileStateSnapshotStore()
-    snapshot_key = f"{cfg.environment}:{cfg.symbol}"
-    loaded_snapshot = snapshot_store.load_snapshot(snapshot_key)
-    loaded_tick_id = 0
-
-    if loaded_snapshot is not None:
-        apply_state_snapshot(context, symbol=cfg.symbol, snapshot=loaded_snapshot)
-        loaded_tick_id = int(loaded_snapshot.get("tick_id") or 0)
-        log_stage(
-            "LOAD",
-            "📦 Снапшот state найден и загружен",
-            symbol=cfg.symbol,
-            tick_id=loaded_tick_id,
-        )
-    else:
-        log_stage(
-            "LOAD",
-            "📦 Снапшот state не найден, стартуем с пустого in-memory state",
-            symbol=cfg.symbol,
-        )
+    snapshot_svc = StateSnapshotService(snapshot_store, cfg)
+    loaded_tick_id = snapshot_svc.load(context)
 
     # [WARMUP]
     log_stage(
@@ -159,12 +139,7 @@ def run(
             )
 
             # Периодическое сохранение снапшота во внешнее хранилище
-            interval = getattr(cfg, "state_snapshot_interval_ticks", 0)
-            if interval > 0 and tick_id % interval == 0:
-                snapshot = make_state_snapshot(
-                    context, symbol=symbol, tick_id=tick_id
-                )
-                snapshot_store.save_snapshot(snapshot_key, snapshot)
+            snapshot_svc.maybe_save(context, tick_id=tick_id)
 
             # [HEARTBEAT]
             if tick_id % 5 == 0:
