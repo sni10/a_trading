@@ -23,7 +23,7 @@ def _build_context_with_cache(symbol: str = "BTC/USDT") -> Dict[str, Any]:
     return ctx
 
 
-def test_tick_sequence_fills_trades_history_until_window_limit_via_orderflow_simulator() -> None:
+def test_ticker_sequence_fills_trades_history_until_window_limit_via_orderflow_simulator() -> None:
     symbol = "BTC/USDT"
     ctx = _build_context_with_cache(symbol)
 

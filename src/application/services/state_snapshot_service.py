@@ -31,7 +31,7 @@ class StateSnapshotService:
     def load(self, context: Dict[str, Any]) -> int:
         """Загрузить снапшот и применить его к ``context``.
 
-        Возвращает стартовый ``tick_id`` из снапшота или ``0``, если
+        Возвращает стартовый ``ticker_id`` из снапшота или ``0``, если
         снапшота нет или он пустой.
         """
 
@@ -47,20 +47,20 @@ class StateSnapshotService:
 
         apply_state_snapshot(context, symbol=self._cfg.symbol, snapshot=snapshot)
 
-        loaded_tick_id = int(snapshot.get("tick_id") or 0)
+        loaded_ticker_id = int(snapshot.get("ticker_id") or 0)
         log_stage(
             "LOAD",
             "📦 Снапшот state найден и загружен",
             symbol=self._cfg.symbol,
-            tick_id=loaded_tick_id,
+            ticker_id=loaded_ticker_id,
         )
-        return loaded_tick_id
+        return loaded_ticker_id
 
-    def maybe_save(self, context: Dict[str, Any], *, tick_id: int) -> None:
+    def maybe_save(self, context: Dict[str, Any], *, ticker_id: int) -> None:
         """По интервалу сохранить снапшот state во внешнее хранилище.
 
         Интервал берётся из ``cfg.state_snapshot_interval_ticks``. Если
-        интервал не задан (<= 0) или ``tick_id`` не кратен интервалу –
+        интервал не задан (<= 0) или ``ticker_id`` не кратен интервалу –
         ничего не делает.
         """
 
@@ -68,13 +68,13 @@ class StateSnapshotService:
         if interval <= 0:
             return
 
-        if tick_id % interval != 0:
+        if ticker_id % interval != 0:
             return
 
         snapshot = make_state_snapshot(
             context,
             symbol=self._cfg.symbol,
-            tick_id=tick_id,
+            ticker_id=ticker_id,
         )
         self._store.save_snapshot(self._key, snapshot)
 

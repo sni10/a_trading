@@ -4,7 +4,7 @@ from typing import Any, Dict, List
 
 import pytest
 
-from src.application.services.tick_pipeline_service import TickPipelineService
+from src.application.services.ticker_pipeline_service import TickPipelineService
 from src.config.config import AppConfig
 from src.domain.services.context.state import init_context
 
@@ -17,14 +17,14 @@ def base_context() -> Dict[str, Any]:
     return init_context(cfg)
 
 
-def test_process_tick_does_not_execute_on_hold(monkeypatch, base_context) -> None:
+def test_process_ticker_does_not_execute_on_hold(monkeypatch, base_context) -> None:
     """При действии HOLD execute не должен вызываться."""
 
-    import src.application.services.tick_pipeline_service as tps
+    import src.application.services.ticker_pipeline_service as tps
 
     executed: List[Dict[str, Any]] = []
 
-    def fake_evaluate_strategies(context: Dict[str, Any], *, tick_id: int, symbol: str):
+    def fake_evaluate_strategies(context: Dict[str, Any], *, ticker_id: int, symbol: str):
         return [
             {
                 "action": "HOLD",
@@ -38,7 +38,7 @@ def test_process_tick_does_not_execute_on_hold(monkeypatch, base_context) -> Non
         intents: List[Dict[str, Any]],
         context: Dict[str, Any],
         *,
-        tick_id: int,
+        ticker_id: int,
         symbol: str,
     ) -> Dict[str, Any]:
         # Решение явно сигнализирует HOLD.
@@ -48,13 +48,13 @@ def test_process_tick_does_not_execute_on_hold(monkeypatch, base_context) -> Non
         decision: Dict[str, Any],
         context: Dict[str, Any],
         *,
-        tick_id: int,
+        ticker_id: int,
         symbol: str,
     ) -> None:  # pragma: no cover - не должен вызываться в этом тесте
         executed.append(
             {
                 "decision": decision,
-                "tick_id": tick_id,
+                "ticker_id": ticker_id,
                 "symbol": symbol,
             }
         )
@@ -66,7 +66,7 @@ def test_process_tick_does_not_execute_on_hold(monkeypatch, base_context) -> Non
     cfg = AppConfig()
     service = TickPipelineService(cfg)
 
-    tick_id = 1
+    ticker_id = 1
     symbol = cfg.symbol
     price = 100.0
     ts = 1_700_000_000_000
@@ -74,7 +74,7 @@ def test_process_tick_does_not_execute_on_hold(monkeypatch, base_context) -> Non
     service.process_tick(
         base_context,
         symbol=symbol,
-        tick_id=tick_id,
+        ticker_id=ticker_id,
         price=price,
         ts=ts,
     )
@@ -95,18 +95,18 @@ def test_process_tick_does_not_execute_on_hold(monkeypatch, base_context) -> Non
     assert len(intents_history) == 1
     assert len(decisions_history) == 1
 
-    # Метрики обновлены на текущий tick_id.
-    assert base_context["metrics"]["ticks"] == tick_id
+    # Метрики обновлены на текущий ticker_id.
+    assert base_context["metrics"]["ticks"] == ticker_id
 
 
-def test_process_tick_executes_on_non_hold(monkeypatch, base_context) -> None:
+def test_process_ticker_executes_on_non_hold(monkeypatch, base_context) -> None:
     """При действии BUY/SELL execute вызывается ровно один раз с корректными параметрами."""
 
-    import src.application.services.tick_pipeline_service as tps
+    import src.application.services.ticker_pipeline_service as tps
 
     calls: List[Dict[str, Any]] = []
 
-    def fake_evaluate_strategies(context: Dict[str, Any], *, tick_id: int, symbol: str):
+    def fake_evaluate_strategies(context: Dict[str, Any], *, ticker_id: int, symbol: str):
         return [
             {
                 "action": "BUY",
@@ -120,7 +120,7 @@ def test_process_tick_executes_on_non_hold(monkeypatch, base_context) -> None:
         intents: List[Dict[str, Any]],
         context: Dict[str, Any],
         *,
-        tick_id: int,
+        ticker_id: int,
         symbol: str,
     ) -> Dict[str, Any]:
         assert intents and intents[0]["action"] == "BUY"
@@ -130,14 +130,14 @@ def test_process_tick_executes_on_non_hold(monkeypatch, base_context) -> None:
         decision: Dict[str, Any],
         context: Dict[str, Any],
         *,
-        tick_id: int,
+        ticker_id: int,
         symbol: str,
     ) -> None:
         calls.append(
             {
                 "decision": decision,
                 "context": context,
-                "tick_id": tick_id,
+                "ticker_id": ticker_id,
                 "symbol": symbol,
             }
         )
@@ -149,7 +149,7 @@ def test_process_tick_executes_on_non_hold(monkeypatch, base_context) -> None:
     cfg = AppConfig()
     service = TickPipelineService(cfg)
 
-    tick_id = 5
+    ticker_id = 5
     symbol = cfg.symbol
     price = 250.5
     ts = 1_700_000_100_000
@@ -157,7 +157,7 @@ def test_process_tick_executes_on_non_hold(monkeypatch, base_context) -> None:
     service.process_tick(
         base_context,
         symbol=symbol,
-        tick_id=tick_id,
+        ticker_id=ticker_id,
         price=price,
         ts=ts,
     )
@@ -166,7 +166,7 @@ def test_process_tick_executes_on_non_hold(monkeypatch, base_context) -> None:
     assert len(calls) == 1
     call = calls[0]
 
-    assert call["tick_id"] == tick_id
+    assert call["ticker_id"] == ticker_id
     assert call["symbol"] == symbol
     assert call["decision"]["action"] == "BUY"
     assert call["decision"]["reason"] == "ok"
@@ -180,4 +180,4 @@ def test_process_tick_executes_on_non_hold(monkeypatch, base_context) -> None:
     assert decision["action"] == "BUY"
 
     # Метрики обновлены.
-    assert base_context["metrics"]["ticks"] == tick_id
+    assert base_context["metrics"]["ticks"] == ticker_id

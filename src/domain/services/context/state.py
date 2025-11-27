@@ -75,11 +75,11 @@ def update_market_state(
     )
 
 
-def update_metrics(context: Dict[str, Any], tick_id: int) -> None:
+def update_metrics(context: Dict[str, Any], ticker_id: int) -> None:
     m = context.get("metrics", {})
-    m["ticks"] = tick_id
+    m["ticks"] = ticker_id
     context["metrics"] = m
-    log_info(f"📂 [STATE] Обновление метрик состояния | tick_id: {tick_id}", _LOG)
+    log_info(f"📂 [STATE] Обновление метрик состояния | ticker_id: {ticker_id}", _LOG)
 
 
 def _get_window_size_for_symbol(context: Dict[str, Any], symbol: str, *, default: int = 1000) -> int:
@@ -197,7 +197,7 @@ def record_decision(
 
 
 def make_state_snapshot(
-    context: Dict[str, Any], *, symbol: str, tick_id: int
+    context: Dict[str, Any], *, symbol: str, ticker_id: int
 ) -> Dict[str, Any]:
     """Сформировать сериализуемый снапшот state для указанного инструмента.
 
@@ -217,7 +217,7 @@ def make_state_snapshot(
 
     snapshot: Dict[str, Any] = {
         "symbol": symbol,
-        "tick_id": tick_id,
+        "ticker_id": ticker_id,
         "market": market,
         "indicators": indicators,
         "indicators_history": indicators_history,
@@ -229,7 +229,7 @@ def make_state_snapshot(
     }
 
     log_info(
-        f"📂 [STATE] Формирование снапшота state | symbol: {symbol} | tick_id: {tick_id} | has_market: {market is not None} | has_indicators: {indicators is not None} | intents_count: {len(intents)}",
+        f"📂 [STATE] Формирование снапшота state | symbol: {symbol} | ticker_id: {ticker_id} | has_market: {market is not None} | has_indicators: {indicators is not None} | intents_count: {len(intents)}",
         _LOG
     )
 
@@ -275,7 +275,7 @@ def apply_state_snapshot(
         context["metrics"] = dict(metrics)
 
     log_info(
-        f"📦 [LOAD] Снапшот state применён к контексту | symbol: {symbol} | tick_id: {snapshot.get('tick_id')}",
+        f"📦 [LOAD] Снапшот state применён к контексту | symbol: {symbol} | ticker_id: {snapshot.get('ticker_id')}",
         _LOG
     )
 

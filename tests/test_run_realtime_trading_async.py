@@ -26,7 +26,7 @@ class _FakePipeline:
         context: dict[str, Any],
         *,
         symbol: str,
-        tick_id: int,
+        ticker_id: int,
         price: float,
         ts: int,
     ) -> None:  # type: ignore[override]
@@ -34,7 +34,7 @@ class _FakePipeline:
             {
                 "context": context,
                 "symbol": symbol,
-                "tick_id": tick_id,
+                "ticker_id": ticker_id,
                 "price": price,
                 "ts": ts,
             }
@@ -45,8 +45,8 @@ class _FakeSnapshotService:
     def __init__(self) -> None:
         self.saved_ids: list[int] = []
 
-    def maybe_save(self, context: dict[str, Any], *, tick_id: int) -> None:  # type: ignore[override]
-        self.saved_ids.append(tick_id)
+    def maybe_save(self, context: dict[str, Any], *, ticker_id: int) -> None:  # type: ignore[override]
+        self.saved_ids.append(ticker_id)
 
 
 @pytest.mark.asyncio
@@ -54,7 +54,7 @@ async def test_run_realtime_core_processes_all_ticks_and_saves_snapshots() -> No
     """Проверяет core-логику async-конвейера без реальной сети/CCXT.
 
     Тестирует функцию ``_run_realtime_core`` напрямую, используя
-    фейковые tick_source/pipeline/snapshot_svc.
+    фейковые ticker_source/pipeline/snapshot_svc.
     """
 
     # --- подготовка фейковых тиков ---
@@ -79,20 +79,20 @@ async def test_run_realtime_core_processes_all_ticks_and_saves_snapshots() -> No
 
     context: dict[str, Any] = {}
 
-    # Стартуем с tick_id == 10, чтобы проверить корректный инкремент.
-    start_tick_id = 10
+    # Стартуем с ticker_id == 10, чтобы проверить корректный инкремент.
+    start_ticker_id = 10
 
     await run_realtime_trading._run_realtime_core(  # type: ignore[attr-defined]
-        tick_source=fake_source,
+        ticker_source=fake_source,
         pipeline=fake_pipeline,
         snapshot_svc=fake_snapshot,
         context=context,
         cfg=run_realtime_trading.load_config(symbol="BTC/USDT"),
         symbol="BTC/USDT",
-        start_tick_id=start_tick_id,
+        start_ticker_id=start_ticker_id,
     )
 
     # --- проверки ---
-    # Для двух тиков должны быть tick_id == 11 и 12.
-    assert [c["tick_id"] for c in fake_pipeline.calls] == [11, 12]
+    # Для двух тиков должны быть ticker_id == 11 и 12.
+    assert [c["ticker_id"] for c in fake_pipeline.calls] == [11, 12]
     assert fake_snapshot.saved_ids == [11, 12]

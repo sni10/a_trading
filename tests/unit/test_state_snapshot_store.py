@@ -16,7 +16,7 @@ def test_file_state_snapshot_store_save_and_load(tmp_path) -> None:
 
     snapshot: Dict[str, Any] = {
         "symbol": "BTC/USDT",
-        "tick_id": 42,
+        "ticker_id": 42,
         "market": {"last_price": 123.45, "ts": 111},
         "indicators": {"sma": 123.45},
         "indicators_history": [],
@@ -33,7 +33,7 @@ def test_file_state_snapshot_store_save_and_load(tmp_path) -> None:
     loaded = store.load_snapshot(key)
     assert loaded is not None
     assert loaded["symbol"] == "BTC/USDT"
-    assert loaded["tick_id"] == 42
+    assert loaded["ticker_id"] == 42
     assert loaded["market"]["last_price"] == 123.45
 
 
@@ -47,7 +47,7 @@ def test_make_and_apply_state_snapshot_roundtrip(tmp_path) -> None:
     context["metrics"]["ticks"] = 5
     context["intents"][symbol] = [{"action": "BUY"}]
 
-    snapshot = make_state_snapshot(context, symbol=symbol, tick_id=5)
+    snapshot = make_state_snapshot(context, symbol=symbol, ticker_id=5)
 
     # Применяем снапшот к новому контексту и убеждаемся, что данные восстановлены
     new_ctx = init_context(cfg)

@@ -164,17 +164,17 @@ class InMemoryIndicatorStore(IIndicatorStore):
 
     # --- Политика обновления ---
 
-    def _should_update(self, interval: int, tick_id: int) -> bool:
-        return interval > 0 and tick_id % interval == 0
+    def _should_update(self, interval: int, ticker_id: int) -> bool:
+        return interval > 0 and ticker_id % interval == 0
 
-    def should_update_fast(self, tick_id: int) -> bool:  # type: ignore[override]
-        return self._should_update(self.fast_interval, tick_id)
+    def should_update_fast(self, ticker_id: int) -> bool:  # type: ignore[override]
+        return self._should_update(self.fast_interval, ticker_id)
 
-    def should_update_medium(self, tick_id: int) -> bool:  # type: ignore[override]
-        return self._should_update(self.medium_interval, tick_id)
+    def should_update_medium(self, ticker_id: int) -> bool:  # type: ignore[override]
+        return self._should_update(self.medium_interval, ticker_id)
 
-    def should_update_heavy(self, tick_id: int) -> bool:  # type: ignore[override]
-        return self._should_update(self.heavy_interval, tick_id)
+    def should_update_heavy(self, ticker_id: int) -> bool:  # type: ignore[override]
+        return self._should_update(self.heavy_interval, ticker_id)
 
 
 __all__ = [

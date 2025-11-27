@@ -28,7 +28,7 @@ class _FakePipeline:
         context: dict[str, Any],
         *,
         symbol: str,
-        tick_id: int,
+        ticker_id: int,
         price: float,
         ts: int,
     ) -> None:  # type: ignore[override]
@@ -36,7 +36,7 @@ class _FakePipeline:
             {
                 "context": context,
                 "symbol": symbol,
-                "tick_id": tick_id,
+                "ticker_id": ticker_id,
                 "price": price,
                 "ts": ts,
             }
@@ -47,7 +47,7 @@ class _DummySnapshotService:
     """Заглушка StateSnapshotService без файловой системы.
 
     Используется только для run_demo_offline: load() всегда возвращает 0,
-    maybe_save() записывает только tick_id в список, не трогая диски.
+    maybe_save() записывает только ticker_id в список, не трогая диски.
     """
 
     def __init__(self) -> None:
@@ -58,8 +58,8 @@ class _DummySnapshotService:
         self.loaded.append({"context": context})
         return 0
 
-    def maybe_save(self, context: dict[str, Any], *, tick_id: int) -> None:  # type: ignore[override]
-        self.saved_ids.append(tick_id)
+    def maybe_save(self, context: dict[str, Any], *, ticker_id: int) -> None:  # type: ignore[override]
+        self.saved_ids.append(ticker_id)
 
 
 def _fake_generate_ticks(symbol: str, max_ticks: int, sleep_sec: float):  # type: ignore[override]
@@ -122,7 +122,7 @@ def test_run_demo_offline_uses_pipeline_for_each_generated_tick(
         if symbol is not None:
             cfg.symbol = symbol
         cfg.max_ticks = max_ticks
-        cfg.tick_sleep_sec = 0.0
+        cfg.ticker_sleep_sec = 0.0
         return cfg
 
     monkeypatch.setattr(run_realtime_trading, "load_config", fake_load_config)
@@ -131,7 +131,7 @@ def test_run_demo_offline_uses_pipeline_for_each_generated_tick(
 
     # --- проверки ---
     # Должно быть ровно max_ticks вызовов pipeline.process_tick
-    assert [call["tick_id"] for call in fake_pipeline.calls] == list(
+    assert [call["ticker_id"] for call in fake_pipeline.calls] == list(
         range(1, max_ticks + 1)
     )
 

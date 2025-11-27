@@ -3,7 +3,7 @@ from typing import Any, Deque, Dict
 
 from src.domain.interfaces.cache import IIndicatorStore
 from src.domain.services.context.state import record_indicators
-from src.domain.services.tick.tick_source import Ticker
+from src.domain.services.ticker.ticker_source import Ticker
 from src.infrastructure.logging.logging_setup import log_stage, log_info
 
 # Имя логгера для этого модуля
@@ -44,14 +44,14 @@ class IndicatorEngine:
         self,
         context: Dict[str, Any],
         *,
-        tick_id: int,
+        ticker_id: int,
         symbol: str,
         ticker: Ticker,
     ) -> Dict[str, Any]:
         last_price = float(ticker["last"])
 
         log_info(
-            f"📊 [IND] Расчёт индикаторов по тикеру | tick_id: {tick_id} | symbol: {symbol} | price: {last_price:.8f}",
+            f"📊 [IND] Расчёт индикаторов по тикеру | ticker_id: {ticker_id} | symbol: {symbol} | price: {last_price:.8f}",
             _LOG
         )
 
@@ -91,7 +91,7 @@ class IndicatorEngine:
             n = len(history_list)
 
             # --- FAST слой ---
-            if store.should_update_fast(tick_id):
+            if store.should_update_fast(ticker_id):
                 # Исторический демо‑индикатор: SMA по 5 последним тикам.
                 if n >= fast_window:
                     indicators["sma_fast_5"] = _sma(history_list[-fast_window:])
@@ -119,7 +119,7 @@ class IndicatorEngine:
                 store.fast_history.append(last_price)  # type: ignore[attr-defined]
 
             # --- MEDIUM слой ---
-            if store.should_update_medium(tick_id):
+            if store.should_update_medium(ticker_id):
                 # Демонстрационная SMA по 20 последним тикам.
                 if n >= medium_window:
                     indicators["sma_medium_20"] = _sma(
@@ -150,7 +150,7 @@ class IndicatorEngine:
                 store.medium_history.append(last_price)  # type: ignore[attr-defined]
 
             # --- HEAVY слой ---
-            if store.should_update_heavy(tick_id):
+            if store.should_update_heavy(ticker_id):
                 # Демонстрационная SMA по 100 последним тикам.
                 if n >= heavy_window:
                     indicators["sma_heavy_100"] = _sma(
@@ -238,7 +238,7 @@ class IndicatorEngine:
 
         snapshot: Dict[str, Any] = {
             "symbol": symbol,
-            "tick_id": tick_id,
+            "ticker_id": ticker_id,
             "price": float(last_price),
             "sma": sma_placeholder,
             "rsi": rsi_placeholder,
@@ -255,7 +255,7 @@ class IndicatorEngine:
         has_medium = "sma_medium_20" in snapshot
         has_heavy = "sma_heavy_100" in snapshot
         log_info(
-            f"📊 [IND] Снимок индикаторов сформирован | tick_id: {tick_id} | symbol: {symbol} | "
+            f"📊 [IND] Снимок индикаторов сформирован | ticker_id: {ticker_id} | symbol: {symbol} | "
             f"sma: {snapshot['sma']:.8f} | has_fast: {has_fast} | has_medium: {has_medium} | has_heavy: {has_heavy}",
             _LOG
         )
@@ -266,7 +266,7 @@ _ENGINE = IndicatorEngine()
 
 
 def compute_indicators(
-    context: Dict[str, Any], *, tick_id: int, symbol: str, price: float
+    context: Dict[str, Any], *, ticker_id: int, symbol: str, price: float
 ) -> Dict[str, Any]:
     """Фасад для расчёта индикаторов, совместимый с существующим API.
 
@@ -302,7 +302,7 @@ def compute_indicators(
 
     return _ENGINE.on_ticker(
         context,
-        tick_id=tick_id,
+        ticker_id=ticker_id,
         symbol=symbol,
         ticker=ticker,
     )

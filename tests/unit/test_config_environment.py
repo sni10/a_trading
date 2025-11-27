@@ -17,7 +17,7 @@ def test_load_config_defaults(monkeypatch) -> None:
     _clear_env([
         "APP_ENV",
         "MAX_TICKS",
-        "TICK_SLEEP_SEC",
+        "TICKER_SLEEP_SEC",
         "INDICATOR_FAST_INTERVAL",
         "INDICATOR_MEDIUM_INTERVAL",
         "INDICATOR_HEAVY_INTERVAL",
@@ -33,7 +33,7 @@ def test_load_config_defaults(monkeypatch) -> None:
     assert cfg.environment == "local"
     assert cfg.symbol == "BTC/USDT"
     assert cfg.max_ticks == 10
-    assert cfg.tick_sleep_sec == 0.2
+    assert cfg.ticker_sleep_sec == 0.2
     assert cfg.indicator_fast_interval == 1
     assert cfg.indicator_medium_interval == 3
     assert cfg.indicator_heavy_interval == 5
@@ -44,7 +44,7 @@ def test_load_config_from_env(monkeypatch) -> None:
 
     monkeypatch.setenv("APP_ENV", "dev")
     monkeypatch.setenv("MAX_TICKS", "5")
-    monkeypatch.setenv("TICK_SLEEP_SEC", "0.1")
+    monkeypatch.setenv("TICKER_SLEEP_SEC", "0.1")
     monkeypatch.setenv("INDICATOR_FAST_INTERVAL", "2")
     monkeypatch.setenv("INDICATOR_MEDIUM_INTERVAL", "4")
     monkeypatch.setenv("INDICATOR_HEAVY_INTERVAL", "8")
@@ -56,7 +56,7 @@ def test_load_config_from_env(monkeypatch) -> None:
     # поэтому берётся дефолт из AppConfig.
     assert cfg.symbol == "BTC/USDT"
     assert cfg.max_ticks == 5
-    assert cfg.tick_sleep_sec == 0.1
+    assert cfg.ticker_sleep_sec == 0.1
     assert cfg.indicator_fast_interval == 2
     assert cfg.indicator_medium_interval == 4
     assert cfg.indicator_heavy_interval == 8

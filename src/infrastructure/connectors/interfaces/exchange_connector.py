@@ -31,7 +31,7 @@ class IExchangeConnector(Protocol):
 
         .. code-block:: python
 
-            tick = {
+            ticker = {
                 "symbol": str,      # "BTC/USDT"
                 "last": float,      # последняя цена сделки
                 "timestamp": int,   # unix‑timestamp в миллисекундах

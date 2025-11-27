@@ -6,7 +6,7 @@ from src.infrastructure.logging.logging_setup import log_info
 _LOG = __name__
 
 
-def decide(intents: List[Dict[str, Any]], context: Dict[str, Any], *, tick_id: int, symbol: str) -> Dict[str, Any]:
+def decide(intents: List[Dict[str, Any]], context: Dict[str, Any], *, ticker_id: int, symbol: str) -> Dict[str, Any]:
     """Простейший оркестратор принятия решения по intents.
 
     Контракт (на текущем этапе прототипа):
@@ -50,7 +50,7 @@ def decide(intents: List[Dict[str, Any]], context: Dict[str, Any], *, tick_id: i
     """
 
     log_info(
-        f"🧩 [ORCH] Получен список intents для обработки | tick_id: {tick_id} | symbol: {symbol} | intents_count: {len(intents)}",
+        f"🧩 [ORCH] Получен список intents для обработки | ticker_id: {ticker_id} | symbol: {symbol} | intents_count: {len(intents)}",
         _LOG
     )
 
@@ -102,7 +102,7 @@ def decide(intents: List[Dict[str, Any]], context: Dict[str, Any], *, tick_id: i
                 }
 
     log_info(
-        f"🧩 [ORCH] Решение принято | tick_id: {tick_id} | symbol: {symbol} | action: {decision.get('action')} | reason: {decision.get('reason')}",
+        f"🧩 [ORCH] Решение принято | ticker_id: {ticker_id} | symbol: {symbol} | action: {decision.get('action')} | reason: {decision.get('reason')}",
         _LOG
     )
     return decision

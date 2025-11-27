@@ -13,7 +13,7 @@ def test_decide_returns_hold_when_no_intents():
     intents = []
     context = {"market": {"BTC/USDT": {"ts": 1234567890}}}
 
-    result = decide(intents, context, tick_id=1, symbol="BTC/USDT")
+    result = decide(intents, context, ticker_id=1, symbol="BTC/USDT")
 
     assert result["action"] == "HOLD"
     assert result["reason"] == "no_action"
@@ -28,7 +28,7 @@ def test_decide_returns_hold_when_all_intents_are_hold():
     ]
     context = {"market": {"BTC/USDT": {"ts": 1234567890}}}
 
-    result = decide(intents, context, tick_id=2, symbol="BTC/USDT")
+    result = decide(intents, context, ticker_id=2, symbol="BTC/USDT")
 
     assert result["action"] == "HOLD"
     assert result["reason"] == "no_action"
@@ -44,7 +44,7 @@ def test_decide_selects_first_non_hold_action():
     ]
     context = {"market": {"BTC/USDT": {"ts": 1234567890}}}
 
-    result = decide(intents, context, tick_id=3, symbol="BTC/USDT")
+    result = decide(intents, context, ticker_id=3, symbol="BTC/USDT")
 
     assert result["action"] == "BUY"
     assert result["reason"] == "ema_crossover"
@@ -63,7 +63,7 @@ def test_decide_includes_params_from_intent():
     ]
     context = {"market": {"ETH/USDT": {"ts": 9876543210}}}
 
-    result = decide(intents, context, tick_id=4, symbol="ETH/USDT")
+    result = decide(intents, context, ticker_id=4, symbol="ETH/USDT")
 
     assert result["action"] == "SELL"
     assert result["reason"] == "stop_loss"
@@ -77,7 +77,7 @@ def test_decide_handles_missing_params_in_intent():
     intents = [{"action": "BUY", "reason": "manual"}]
     context = {"market": {"SOL/USDT": {"ts": 1111111111}}}
 
-    result = decide(intents, context, tick_id=5, symbol="SOL/USDT")
+    result = decide(intents, context, ticker_id=5, symbol="SOL/USDT")
 
     assert result["action"] == "BUY"
     assert result["reason"] == "manual"
@@ -99,7 +99,7 @@ def test_decide_respects_risk_limit_when_amount_within_limit():
         "risk": {"BTC/USDT": {"max_amount": 1.0}},
     }
 
-    result = decide(intents, context, tick_id=6, symbol="BTC/USDT")
+    result = decide(intents, context, ticker_id=6, symbol="BTC/USDT")
 
     assert result["action"] == "BUY"
     assert result["reason"] == "signal"
@@ -118,7 +118,7 @@ def test_decide_downgrades_to_hold_when_risk_limit_exceeded():
         "risk": {"BTC/USDT": {"max_amount": 1.0}},
     }
 
-    result = decide(intents, context, tick_id=7, symbol="BTC/USDT")
+    result = decide(intents, context, ticker_id=7, symbol="BTC/USDT")
 
     assert result["action"] == "HOLD"
     assert result["reason"] == "risk_limit_exceeded"

@@ -12,7 +12,7 @@ from src.application.workers.order_book_refresh_worker import (
 from src.config.config import AppConfig
 from src.domain.interfaces.cache import IMarketCache
 from src.domain.services.indicators.indicator_engine import compute_indicators
-from src.domain.services.tick.tick_source import Ticker, TickSource
+from src.domain.services.ticker.ticker_source import Ticker, TickSource
 from src.infrastructure.connectors.interfaces.exchange_connector import (
     IExchangeConnector,
 )
@@ -83,7 +83,7 @@ class FakeMarketCache(IMarketCache):  # type: ignore[misc]
         return []
 
 
-async def _drain_tick_source(source: TickSource, limit: int) -> List[Ticker]:
+async def _drain_ticker_source(source: TickSource, limit: int) -> List[Ticker]:
     result: List[Ticker] = []
     async for tick in source.stream():
         result.append(tick)
@@ -93,7 +93,7 @@ async def _drain_tick_source(source: TickSource, limit: int) -> List[Ticker]:
 
 
 @pytest.mark.unit
-def test_tick_source_streams_unified_ticks() -> None:
+def test_ticker_source_streams_unified_ticks() -> None:
     symbol = "BTC/USDT"
     ticks: List[Ticker] = [
         Ticker(
@@ -129,7 +129,7 @@ def test_tick_source_streams_unified_ticks() -> None:
     connector = FakeExchangeConnector(ticks=ticks, order_book={})
     source = TickSource(connector, symbol)
 
-    out_ticks = asyncio.run(_drain_tick_source(source, limit=10))
+    out_ticks = asyncio.run(_drain_ticker_source(source, limit=10))
 
     assert len(out_ticks) == 2
     assert out_ticks[0]["symbol"] == symbol
@@ -197,21 +197,21 @@ def test_compute_indicators_uses_price_history_and_triggers() -> None:
     }
 
     # Первый тик: сформируется только fast‑индикатор, т.к. истории ещё мало
-    snapshot1 = compute_indicators(context, tick_id=1, symbol=symbol, price=100.0)
+    snapshot1 = compute_indicators(context, ticker_id=1, symbol=symbol, price=100.0)
     assert snapshot1["price"] == 100.0
     # fast_interval == 1, поэтому fast_history должен обновиться
     assert list(store.fast_history) == [100.0]
 
     # Заполняем ещё несколько тиков, чтобы запустились medium/fast
     for tid, price in [(2, 101.0), (3, 102.0), (4, 103.0), (5, 104.0)]:
-        compute_indicators(context, tick_id=tid, symbol=symbol, price=price)
+        compute_indicators(context, ticker_id=tid, symbol=symbol, price=price)
 
     history = context["price_history"][symbol]
     assert len(history) >= 5
 
     # На тике 4 medium_interval == 2, поэтому SMA medium должна посчитаться
     snapshot_last = compute_indicators(
-        context, tick_id=6, symbol=symbol, price=105.0
+        context, ticker_id=6, symbol=symbol, price=105.0
     )
 
     assert snapshot_last["symbol"] == symbol

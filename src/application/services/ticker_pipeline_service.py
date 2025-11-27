@@ -42,7 +42,7 @@ class TickPipelineService:
         context: Dict[str, Any],
         *,
         symbol: str,
-        tick_id: int,
+        ticker_id: int,
         price: float,
         ts: int,
     ) -> None:
@@ -53,46 +53,46 @@ class TickPipelineService:
         """
 
         # FEEDS: обновление market‑state и тикерного кэша.
-        log_info(f"🌐 [FEEDS] Обновление market-state | tick_id: {tick_id} | symbol: {symbol} | price: {price:.8f} | ts: {ts}", _LOG)
+        log_info(f"🌐 [FEEDS] Обновление market-state | ticker_id: {ticker_id} | symbol: {symbol} | price: {price:.8f} | ts: {ts}", _LOG)
         update_market_state(context, symbol=symbol, price=price, ts=ts)
 
         # IND: расчёт индикаторов поверх истории цен.
-        log_info(f"📊 [IND] Расчёт индикаторов | tick_id: {tick_id} | symbol: {symbol} | price: {price:.8f}", _LOG)
+        log_info(f"📊 [IND] Расчёт индикаторов | ticker_id: {ticker_id} | symbol: {symbol} | price: {price:.8f}", _LOG)
         indicators = compute_indicators(
-            context, tick_id=tick_id, symbol=symbol, price=price
+            context, ticker_id=ticker_id, symbol=symbol, price=price
         )
-        log_info(f"📊 [IND] Индикаторы рассчитаны | tick_id: {tick_id} | sma: {indicators.get('sma', 'N/A')} | rsi: {indicators.get('rsi', 'N/A')}", _LOG)
+        log_info(f"📊 [IND] Индикаторы рассчитаны | ticker_id: {ticker_id} | sma: {indicators.get('sma', 'N/A')} | rsi: {indicators.get('rsi', 'N/A')}", _LOG)
 
         # CTX: подготовка контекста для стратегий
         positions = context.get("positions") or []
         has_indicators = bool(indicators)
-        log_info(f"🧠 [CTX] Сбор контекста для стратегий | tick_id: {tick_id} | symbol: {symbol} | has_indicators: {has_indicators} | positions: {len(positions)}", _LOG)
+        log_info(f"🧠 [CTX] Сбор контекста для стратегий | ticker_id: {ticker_id} | symbol: {symbol} | has_indicators: {has_indicators} | positions: {len(positions)}", _LOG)
 
         # STRAT: оценка стратегий и формирование intents.
-        log_info(f"🎯 [STRAT] Оценка стратегий | tick_id: {tick_id} | symbol: {symbol}", _LOG)
-        intents = evaluate_strategies(context, tick_id=tick_id, symbol=symbol)
-        log_info(f"🎯 [STRAT] Intents сформированы | tick_id: {tick_id} | intents_count: {len(intents)} | intents: {intents}", _LOG)
+        log_info(f"🎯 [STRAT] Оценка стратегий | ticker_id: {ticker_id} | symbol: {symbol}", _LOG)
+        intents = evaluate_strategies(context, ticker_id=ticker_id, symbol=symbol)
+        log_info(f"🎯 [STRAT] Intents сформированы | ticker_id: {ticker_id} | intents_count: {len(intents)} | intents: {intents}", _LOG)
         record_intents(context, symbol=symbol, intents=intents)
 
         # ORCH: оркестратор принимает финальное решение.
-        log_info(f"🧩 [ORCH] Принятие решения по intents | tick_id: {tick_id} | symbol: {symbol} | intents_count: {len(intents)}", _LOG)
-        decision = decide(intents, context, tick_id=tick_id, symbol=symbol)
+        log_info(f"🧩 [ORCH] Принятие решения по intents | ticker_id: {ticker_id} | symbol: {symbol} | intents_count: {len(intents)}", _LOG)
+        decision = decide(intents, context, ticker_id=ticker_id, symbol=symbol)
         action = decision.get("action")
         reason = decision.get("reason", "")
-        log_info(f"🧩 [ORCH] Решение принято | tick_id: {tick_id} | action: {action} | reason: {reason}", _LOG)
+        log_info(f"🧩 [ORCH] Решение принято | ticker_id: {ticker_id} | action: {action} | reason: {reason}", _LOG)
         record_decision(context, symbol=symbol, decision=decision)
 
         # EXEC: выполнение торгового решения.
         if action and action != "HOLD":
-            log_info(f"⚙️ [EXEC] Исполнение решения | tick_id: {tick_id} | symbol: {symbol} | action: {action} | reason: {reason}", _LOG)
-            execute(decision, context, tick_id=tick_id, symbol=symbol)
-            log_info(f"⚙️ [EXEC] ✅ Решение исполнено | tick_id: {tick_id} | action: {action} | price: {price:.8f}", _LOG)
+            log_info(f"⚙️ [EXEC] Исполнение решения | ticker_id: {ticker_id} | symbol: {symbol} | action: {action} | reason: {reason}", _LOG)
+            execute(decision, context, ticker_id=ticker_id, symbol=symbol)
+            log_info(f"⚙️ [EXEC] ✅ Решение исполнено | ticker_id: {ticker_id} | action: {action} | price: {price:.8f}", _LOG)
         else:
-            log_info(f"⚙️ [EXEC] HOLD - заявки не отправляются | tick_id: {tick_id} | reason: {reason}", _LOG)
+            log_info(f"⚙️ [EXEC] HOLD - заявки не отправляются | ticker_id: {ticker_id} | reason: {reason}", _LOG)
 
         # STATE: обновление агрегированных метрик по конвейеру.
-        log_info(f"📂 [STATE] Обновление метрик | tick_id: {tick_id}", _LOG)
-        update_metrics(context, tick_id=tick_id)
+        log_info(f"📂 [STATE] Обновление метрик | ticker_id: {ticker_id}", _LOG)
+        update_metrics(context, ticker_id=ticker_id)
 
 
 __all__ = ["TickPipelineService"]

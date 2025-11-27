@@ -6,7 +6,7 @@
 * symbol – **одна** торгуемая пара на процесс ("BTC/USDT" и т.п.).
 * indicator_*_interval – частота обновления уровней индикаторов в тиках
   (fast/medium/heavy: 1 / 3 / 5 по умолчанию).
-* max_ticks, tick_sleep_sec – параметры демо‑конвейера.
+* max_ticks, ticker_sleep_sec – параметры демо‑конвейера.
 
 Важно: только этот модуль читает os.getenv; дальше по коду передаём уже
 готовый объект :class:`AppConfig`.
@@ -41,7 +41,7 @@ class AppConfig:
     # отдельно, когда появится полноценный MarketBus.
     symbol: str = "BTC/USDT"
     max_ticks: int = 10
-    tick_sleep_sec: float = 0.2
+    ticker_sleep_sec: float = 0.2
 
     # Частота обновления индикаторов (в тиках)
     indicator_fast_interval: int = 1
@@ -103,8 +103,8 @@ class AppConfig:
         if self.max_ticks <= 0:
             raise ValueError("max_ticks must be > 0")
 
-        if self.tick_sleep_sec < 0:
-            raise ValueError("tick_sleep_sec must be >= 0")
+        if self.ticker_sleep_sec < 0:
+            raise ValueError("ticker_sleep_sec must be >= 0")
 
         if self.order_book_refresh_interval_seconds <= 0:
             raise ValueError("order_book_refresh_interval_seconds must be > 0")
@@ -203,7 +203,7 @@ def load_config(
     # Параметры могут уточнять конфиг, но не перекрывают env.
     symbol: str | None = None,
     max_ticks: int | None = None,
-    tick_sleep_sec: float | None = None,
+    ticker_sleep_sec: float | None = None,
 ) -> AppConfig:
     """Собрать AppConfig из значений по умолчанию + env + параметров.
 
@@ -247,12 +247,12 @@ def load_config(
     elif max_ticks is not None:
         base.max_ticks = max_ticks
 
-    # tick_sleep_sec
-    env_tick_sleep = os.getenv("TICK_SLEEP_SEC")
-    if env_tick_sleep is not None:
-        base.tick_sleep_sec = _parse_float(env_tick_sleep, base.tick_sleep_sec)
-    elif tick_sleep_sec is not None:
-        base.tick_sleep_sec = tick_sleep_sec
+    # ticker_sleep_sec
+    env_ticker_sleep = os.getenv("TICKER_SLEEP_SEC")
+    if env_ticker_sleep is not None:
+        base.ticker_sleep_sec = _parse_float(env_ticker_sleep, base.ticker_sleep_sec)
+    elif ticker_sleep_sec is not None:
+        base.ticker_sleep_sec = ticker_sleep_sec
 
     # indicator intervals
     env_fast = os.getenv("INDICATOR_FAST_INTERVAL")

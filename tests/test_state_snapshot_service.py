@@ -42,9 +42,9 @@ def test_load_returns_zero_and_keeps_context_when_snapshot_missing() -> None:
 
     svc = StateSnapshotService(store, cfg)
 
-    start_tick_id = svc.load(context)
+    start_ticker_id = svc.load(context)
 
-    assert start_tick_id == 0
+    assert start_ticker_id == 0
     # Контекст не должен меняться, если снапшота нет
     assert context == {"foo": "bar"}
 
@@ -66,18 +66,18 @@ def test_load_returns_zero_and_keeps_context_when_snapshot_empty(monkeypatch: py
     )
 
     svc = StateSnapshotService(store, cfg)
-    start_tick_id = svc.load(context)
+    start_ticker_id = svc.load(context)
 
-    assert start_tick_id == 0
+    assert start_ticker_id == 0
     # apply_state_snapshot не должен вызываться для пустого снапшота
     assert called == {}
     assert context == {"foo": "bar"}
 
 
-def test_load_applies_snapshot_and_returns_tick_id(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_load_applies_snapshot_and_returns_ticker_id(monkeypatch: pytest.MonkeyPatch) -> None:
     cfg = _make_cfg(environment="local", symbol="BTC/USDT")
     store = DummySnapshotStore()
-    snapshot = {"tick_id": 42, "metrics": {"trades": 10}}
+    snapshot = {"ticker_id": 42, "metrics": {"trades": 10}}
     store.loaded_snapshot = snapshot
     context: Dict[str, Any] = {}
 
@@ -95,9 +95,9 @@ def test_load_applies_snapshot_and_returns_tick_id(monkeypatch: pytest.MonkeyPat
     )
 
     svc = StateSnapshotService(store, cfg)
-    start_tick_id = svc.load(context)
+    start_ticker_id = svc.load(context)
 
-    assert start_tick_id == 42
+    assert start_ticker_id == 42
     assert context.get("applied") is True
     assert applied["symbol"] == cfg.symbol
     assert applied["snapshot"] is snapshot
@@ -118,22 +118,22 @@ def test_maybe_save_does_nothing_when_interval_non_positive(monkeypatch: pytest.
     )
 
     svc = StateSnapshotService(store, cfg)
-    svc.maybe_save(context, tick_id=10)
+    svc.maybe_save(context, ticker_id=10)
 
     assert store.saved == []
 
 
-def test_maybe_save_calls_save_when_tick_matches_interval(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_maybe_save_calls_save_when_ticker_matches_interval(monkeypatch: pytest.MonkeyPatch) -> None:
     cfg = _make_cfg(environment="prod", symbol="ETH/USDT", state_snapshot_interval_ticks=5)
     store = DummySnapshotStore()
     context: Dict[str, Any] = {"some": "state"}
 
-    produced_snapshot = {"tick_id": 10, "foo": "bar"}
+    produced_snapshot = {"ticker_id": 10, "foo": "bar"}
 
-    def fake_make(context_arg: Dict[str, Any], *, symbol: str, tick_id: int) -> Dict[str, Any]:
+    def fake_make(context_arg: Dict[str, Any], *, symbol: str, ticker_id: int) -> Dict[str, Any]:
         assert context_arg is context
         assert symbol == cfg.symbol
-        assert tick_id == 10
+        assert ticker_id == 10
         return produced_snapshot
 
     monkeypatch.setattr(
@@ -143,15 +143,15 @@ def test_maybe_save_calls_save_when_tick_matches_interval(monkeypatch: pytest.Mo
 
     svc = StateSnapshotService(store, cfg)
 
-    # tick_id кратен интервалу – должен сохраниться снапшот
-    svc.maybe_save(context, tick_id=10)
+    # ticker_id кратен интервалу – должен сохраниться снапшот
+    svc.maybe_save(context, ticker_id=10)
 
     assert len(store.saved) == 1
     key, snapshot = store.saved[0]
     assert key == f"{cfg.environment}:{cfg.symbol}"
     assert snapshot is produced_snapshot
 
-    # tick_id не кратен интервалу – не должно быть дополнительных сохранений
-    svc.maybe_save(context, tick_id=11)
+    # ticker_id не кратен интервалу – не должно быть дополнительных сохранений
+    svc.maybe_save(context, ticker_id=11)
     assert len(store.saved) == 1
 

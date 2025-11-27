@@ -53,7 +53,7 @@ class CurrencyPair:
 
             # Exchange params:
             min_step: Минимальный шаг количества (lot size step)
-            price_step: Минимальный шаг цены (tick size)
+            price_step: Минимальный шаг цены (ticker size)
 
             # Cache settings (под лимит ~2MB на символ):
             bar_timeframe: Таймфрейм баров ("1m" или "5m")
