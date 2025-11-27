@@ -182,7 +182,7 @@ def log_stat_block(title: str, stats: list[str], logger_name: str | None = None)
     logger.info("=" * 80)
 
 
-def log_stage(stage: str, msg: str, **fields: Any) -> None:
+def log_stage(stage: str, msg: str, logger_name: str | None = None, **fields: Any) -> None:
     """Унифицированное логирование стадий конвейера (упрощённый формат).
 
     В отличие от предыдущей версии, **не выводит** stage-теги в квадратных
@@ -194,6 +194,7 @@ def log_stage(stage: str, msg: str, **fields: Any) -> None:
         stage: Код этапа (BOOT, TICK, STRAT и т.п.) - используется только
                для выбора emoji.
         msg: Человеко-читаемое сообщение.
+        logger_name: Имя логгера (рекомендуется передавать __name__ модуля).
         fields: Дополнительные поля для отладки (выводятся через ``|``).
     """
     icon = STAGE_ICONS.get(stage.upper(), "ℹ️")
@@ -209,7 +210,8 @@ def log_stage(stage: str, msg: str, **fields: Any) -> None:
     else:
         text = f"{icon} {msg}"
 
-    logging.getLogger().info(text, extra={"stage": stage})
+    logger = logging.getLogger(logger_name) if logger_name else logging.getLogger()
+    logger.info(text, extra={"stage": stage})
 
 
 def _stringify(v: Any) -> str:

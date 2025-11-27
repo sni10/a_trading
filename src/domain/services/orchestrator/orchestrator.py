@@ -1,5 +1,10 @@
 from typing import Dict, Any, List
 
+from src.infrastructure.logging.logging_setup import log_info
+
+# Имя логгера для этого модуля
+_LOG = __name__
+
 
 def decide(intents: List[Dict[str, Any]], context: Dict[str, Any], *, tick_id: int, symbol: str) -> Dict[str, Any]:
     """Простейший оркестратор принятия решения по intents.
@@ -43,6 +48,11 @@ def decide(intents: List[Dict[str, Any]], context: Dict[str, Any], *, tick_id: i
     * Логирование вынесено на уровень выше (TickPipelineService) -
       логируются только важные события (сигналы к действию).
     """
+
+    log_info(
+        f"🧩 [ORCH] Получен список intents для обработки | tick_id: {tick_id} | symbol: {symbol} | intents_count: {len(intents)}",
+        _LOG
+    )
 
     # Базовое решение: HOLD, если стратегий нет или все бездействуют.
     decision: Dict[str, Any] = {
@@ -91,5 +101,9 @@ def decide(intents: List[Dict[str, Any]], context: Dict[str, Any], *, tick_id: i
                     "ts": context.get("market", {}).get(symbol, {}).get("ts"),
                 }
 
+    log_info(
+        f"🧩 [ORCH] Решение принято | tick_id: {tick_id} | symbol: {symbol} | action: {decision.get('action')} | reason: {decision.get('reason')}",
+        _LOG
+    )
     return decision
 

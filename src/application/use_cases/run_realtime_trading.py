@@ -10,6 +10,9 @@ from src.infrastructure.logging.logging_setup import (
     log_separator,
     log_stat_block,
 )
+
+# Имя логгера для этого модуля (используется во всех вызовах log_*)
+_LOG = __name__
 from src.domain.services.market_data.tick_source import generate_ticks
 from src.domain.services.context.state import init_context
 from src.domain.interfaces.currency_pair_repository import ICurrencyPairRepository
@@ -64,12 +67,13 @@ def run_demo_offline(
     active_symbol = cfg.symbol
 
     # === СТАРТОВЫЙ БЛОК ===
-    log_info(f"🚀 ЗАПУСК AlgoTrade Prototype v{__version__} (OFFLINE DEMO) для {active_symbol}")
+    log_info(f"🚀 ЗАПУСК AlgoTrade Prototype v{__version__} (OFFLINE DEMO) для {active_symbol}", _LOG)
 
     # Репозиторий пар: либо передан снаружи (в будущем — обёртка над БД),
     # либо создаём in-memory репозиторий из одного символа конфига.
     if pair_repository is None:
         pair_repository = InMemoryCurrencyPairRepository.from_symbols([cfg.symbol])
+    log_info(f"✅ InMemoryCurrencyPairRepository создан для {cfg.symbol}", _LOG)
 
     pair = pair_repository.get_by_symbol(active_symbol)
     if pair is None:
@@ -77,15 +81,16 @@ def run_demo_offline(
     if not pair.enabled:
         raise RuntimeError(f"Currency pair {active_symbol!r} is disabled for trading")
 
-    log_info(f"✅ Валютная пара {active_symbol} загружена и активна")
+    log_info(f"✅ Валютная пара {active_symbol} загружена и активна", _LOG)
 
     # Базовый dict‑контекст на основе типизированного AppConfig
     context = init_context(cfg)
+    log_info("✅ Базовый контекст инициализирован (init_context)", _LOG)
 
     # Обогащаем контекст CurrencyPair и in-memory кэшами, используя
     # репозиторий пар как единственный источник правды.
     context = build_context(cfg, context, pair_repository=pair_repository)
-    log_info("✅ Контекст и кэши инициализированы")
+    log_info("✅ Контекст обогащён кэшами и CurrencyPair (build_context)", _LOG)
 
     # --- Загрузка state из снапшота (если есть) ---
     snapshot_store = FileStateSnapshotStore()
@@ -93,32 +98,32 @@ def run_demo_offline(
     loaded_tick_id = snapshot_svc.load(context)
 
     if loaded_tick_id > 0:
-        log_info(f"📦 Загружен снапшот состояния, tick_id={loaded_tick_id}")
+        log_info(f"📦 Загружен снапшот состояния, tick_id={loaded_tick_id}", _LOG)
     else:
-        log_info("📦 Снапшот не найден, старт с нуля")
+        log_info("📦 Снапшот не найден, старт с нуля", _LOG)
 
     # Прогрев
-    log_info("🔥 Прогрев индикаторов и стаканов (исторические данные, OHLCV)")
-    log_info(f"   - fast_interval: {cfg.indicator_fast_interval}")
-    log_info(f"   - medium_interval: {cfg.indicator_medium_interval}")
-    log_info(f"   - heavy_interval: {cfg.indicator_heavy_interval}")
+    log_info("🔥 Прогрев индикаторов и стаканов (исторические данные, OHLCV)", _LOG)
+    log_info(f"   - fast_interval: {cfg.indicator_fast_interval}", _LOG)
+    log_info(f"   - medium_interval: {cfg.indicator_medium_interval}", _LOG)
+    log_info(f"   - heavy_interval: {cfg.indicator_heavy_interval}", _LOG)
 
     # Единый конвейер обработки одного тика без I/O.
     pipeline = TickPipelineService(cfg)
-    log_info("✅ Конвейер обработки тиков создан")
+    log_info("✅ Конвейер обработки тиков создан (TickPipelineService)", _LOG)
 
     # === СВОДКА ГОТОВНОСТИ СИСТЕМЫ ===
-    log_separator()
-    log_info("🚀 СИСТЕМА ГОТОВА К ЗАПУСКУ (OFFLINE DEMO)")
-    log_info(f"   - Валютная пара: {active_symbol}")
-    log_info(f"   - Окружение: {cfg.environment}")
-    log_info(f"   - Максимум тиков: {cfg.max_ticks}")
-    log_info(f"   - Задержка между тиками: {cfg.tick_sleep_sec} сек")
-    log_info(f"   - Стартовый tick_id: {loaded_tick_id}")
-    log_separator()
+    log_separator(_LOG)
+    log_info("🚀 СИСТЕМА ГОТОВА К ЗАПУСКУ (OFFLINE DEMO)", _LOG)
+    log_info(f"   - Валютная пара: {active_symbol}", _LOG)
+    log_info(f"   - Окружение: {cfg.environment}", _LOG)
+    log_info(f"   - Максимум тиков: {cfg.max_ticks}", _LOG)
+    log_info(f"   - Задержка между тиками: {cfg.tick_sleep_sec} сек", _LOG)
+    log_info(f"   - Стартовый tick_id: {loaded_tick_id}", _LOG)
+    log_separator(_LOG)
 
     # === ЗАПУСК ТОРГОВОГО ЦИКЛА ===
-    log_info("🔄 Начинаем основной торговый цикл (offline demo)...")
+    log_info("🔄 Начинаем основной торговый цикл (offline demo)...", _LOG)
 
     start_ts = time.time()
     tick_id = loaded_tick_id
@@ -180,28 +185,29 @@ def run_demo_offline(
                 log_info(
                     f"📊 Тик {tick_id} | Цена: {price:.8f} | "
                     f"TPS: {tps:.1f} | Среднее время: {avg_time:.1f}ms | "
-                    f"Мин/Макс: {min_time:.1f}/{max_time:.1f}ms"
+                    f"Мин/Макс: {min_time:.1f}/{max_time:.1f}ms",
+                    _LOG
                 )
 
                 # Сбрасываем статистику для следующего интервала
                 tick_times.clear()
 
     except KeyboardInterrupt:
-        log_warning(f"⚠️ Прерывание по Ctrl+C на тике {tick_id}")
+        log_warning(f"⚠️ Прерывание по Ctrl+C на тике {tick_id}", _LOG)
     except Exception as exc:
-        log_warning(f"❌ Критическая ошибка в торговом цикле: {type(exc).__name__}: {exc}")
+        log_warning(f"❌ Критическая ошибка в торговом цикле: {type(exc).__name__}: {exc}", _LOG)
         raise
     finally:
         # Финальная сводка при остановке
         elapsed = time.time() - start_ts
-        log_separator()
-        log_info(f"🛑 Остановка offline-конвейера для {active_symbol}")
-        log_info(f"   - Всего тиков обработано: {tick_id}")
-        log_info(f"   - Последняя цена: {last_price:.8f}")
-        log_info(f"   - Время работы: {elapsed:.1f} сек")
+        log_separator(_LOG)
+        log_info(f"🛑 Остановка offline-конвейера для {active_symbol}", _LOG)
+        log_info(f"   - Всего тиков обработано: {tick_id}", _LOG)
+        log_info(f"   - Последняя цена: {last_price:.8f}", _LOG)
+        log_info(f"   - Время работы: {elapsed:.1f} сек", _LOG)
         if elapsed > 0:
-            log_info(f"   - Средний TPS: {tick_id / elapsed:.2f}")
-        log_separator()
+            log_info(f"   - Средний TPS: {tick_id / elapsed:.2f}", _LOG)
+        log_separator(_LOG)
 
 
 async def _run_order_book_refresh_worker(
@@ -297,7 +303,8 @@ async def _run_realtime_core(
                 log_info(
                     f"📊 Тик {tick_id} | Цена: {price:.8f} | "
                     f"TPS: {tps:.1f} | Среднее время: {avg_time:.1f}ms | "
-                    f"Мин/Макс: {min_time:.1f}/{max_time:.1f}ms"
+                    f"Мин/Макс: {min_time:.1f}/{max_time:.1f}ms",
+                    _LOG
                 )
 
                 # Сбрасываем статистику для следующего интервала
@@ -306,14 +313,14 @@ async def _run_realtime_core(
     finally:
         # Финальная сводка при остановке
         elapsed = loop.time() - start_ts
-        log_separator()
-        log_info(f"🛑 Остановка realtime-конвейера для {symbol}")
-        log_info(f"   - Всего тиков обработано: {tick_id}")
-        log_info(f"   - Последняя цена: {last_price:.8f}")
-        log_info(f"   - Время работы: {elapsed:.1f} сек")
+        log_separator(_LOG)
+        log_info(f"🛑 Остановка realtime-конвейера для {symbol}", _LOG)
+        log_info(f"   - Всего тиков обработано: {tick_id}", _LOG)
+        log_info(f"   - Последняя цена: {last_price:.8f}", _LOG)
+        log_info(f"   - Время работы: {elapsed:.1f} сек", _LOG)
         if elapsed > 0:
-            log_info(f"   - Средний TPS: {tick_id / elapsed:.2f}")
-        log_separator()
+            log_info(f"   - Средний TPS: {tick_id / elapsed:.2f}", _LOG)
+        log_separator(_LOG)
 
 
 async def run_realtime_from_exchange(symbol: str | None = None) -> None:
@@ -330,61 +337,65 @@ async def run_realtime_from_exchange(symbol: str | None = None) -> None:
     active_symbol = cfg.symbol
 
     # === СТАРТОВЫЙ БЛОК (как в bad_example) ===
-    log_info(f"🚀 ЗАПУСК AlgoTrade Prototype v{__version__} для {active_symbol}")
+    log_info(f"🚀 ЗАПУСК AlgoTrade Prototype v{__version__} для {active_symbol}", _LOG)
 
     # Репозиторий пар и валидация активной пары
     pair_repo = InMemoryCurrencyPairRepository.from_symbols([active_symbol])
+    log_info(f"✅ InMemoryCurrencyPairRepository создан для {active_symbol}", _LOG)
+    
     pair = pair_repo.get_by_symbol(active_symbol)
     if pair is None:
         raise RuntimeError(f"Currency pair {active_symbol!r} is not configured")
     if not pair.enabled:
         raise RuntimeError(f"Currency pair {active_symbol!r} is disabled for trading")
 
-    log_info(f"✅ Валютная пара {active_symbol} загружена и активна")
+    log_info(f"✅ Валютная пара {active_symbol} загружена и активна", _LOG)
 
     # Контекст и снапшоты
     context = init_context(cfg)
+    log_info("✅ Базовый контекст инициализирован (init_context)", _LOG)
+    
     context = build_context(cfg, context, pair_repository=pair_repo)
-    log_info("✅ Контекст и кэши инициализированы")
+    log_info("✅ Контекст обогащён кэшами и CurrencyPair (build_context)", _LOG)
 
     snapshot_store = FileStateSnapshotStore()
     snapshot_svc = StateSnapshotService(snapshot_store, cfg)
     tick_id = snapshot_svc.load(context)
 
     if tick_id > 0:
-        log_info(f"📦 Загружен снапшот состояния, tick_id={tick_id}")
+        log_info(f"📦 Загружен снапшот состояния, tick_id={tick_id}", _LOG)
     else:
-        log_info("📦 Снапшот не найден, старт с нуля")
+        log_info("📦 Снапшот не найден, старт с нуля", _LOG)
 
     # Сетевой коннектор и источник тиков
     connector = CcxtProExchangeConnector(cfg)
     tick_source = TickSource(connector, symbol=active_symbol)
 
     mode_str = "Sandbox" if cfg.sandbox_mode else "Production"
-    log_info(f"✅ Коннектор инициализирован ({cfg.exchange_id}, {mode_str})")
+    log_info(f"✅ Коннектор инициализирован ({cfg.exchange_id}, {mode_str})", _LOG)
 
     # Воркер стакана
     orderbook_task = asyncio.create_task(
         _run_order_book_refresh_worker(connector, context, cfg, symbol=active_symbol)
     )
-    log_info("✅ Воркер стакана запущен")
+    log_info("✅ Воркер стакана запущен", _LOG)
 
     pipeline = TickPipelineService(cfg)
-    log_info("✅ Конвейер обработки тиков создан")
+    log_info("✅ Конвейер обработки тиков создан (TickPipelineService)", _LOG)
 
     # === СВОДКА ГОТОВНОСТИ СИСТЕМЫ ===
-    log_separator()
-    log_info("🚀 СИСТЕМА ГОТОВА К ЗАПУСКУ ТОРГОВЛИ")
-    log_info(f"   - Валютная пара: {active_symbol}")
-    log_info(f"   - Биржа: {cfg.exchange_id}")
-    log_info(f"   - Режим: {mode_str}")
-    log_info(f"   - Окружение: {cfg.environment}")
-    log_info(f"   - Стартовый tick_id: {tick_id}")
-    log_separator()
+    log_separator(_LOG)
+    log_info("🚀 СИСТЕМА ГОТОВА К ЗАПУСКУ ТОРГОВЛИ", _LOG)
+    log_info(f"   - Валютная пара: {active_symbol}", _LOG)
+    log_info(f"   - Биржа: {cfg.exchange_id}", _LOG)
+    log_info(f"   - Режим: {mode_str}", _LOG)
+    log_info(f"   - Окружение: {cfg.environment}", _LOG)
+    log_info(f"   - Стартовый tick_id: {tick_id}", _LOG)
+    log_separator(_LOG)
 
     # === ЗАПУСК ТОРГОВОГО ЦИКЛА ===
-    log_info("🔄 Начинаем основной торговый цикл...")
-    log_info(f"🎯 Подключаемся к тикеру для символа: {active_symbol}")
+    log_info("🔄 Начинаем основной торговый цикл...", _LOG)
+    log_info(f"🎯 Подключаемся к тикеру для символа: {active_symbol}", _LOG)
 
     try:
         await _run_realtime_core(
@@ -404,5 +415,5 @@ async def run_realtime_from_exchange(symbol: str | None = None) -> None:
             pass
 
         await connector.close()
-        log_info("🛑 Коннектор закрыт, система остановлена")
+        log_info("🛑 Коннектор закрыт, система остановлена", _LOG)
 

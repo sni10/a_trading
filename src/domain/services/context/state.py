@@ -2,7 +2,10 @@ from typing import Dict, Any, List
 
 from src.config.config import AppConfig
 from src.domain.interfaces.cache import IMarketCache
-from src.infrastructure.logging.logging_setup import log_stage
+from src.infrastructure.logging.logging_setup import log_info
+
+# Имя логгера для этого модуля
+_LOG = __name__
 
 
 def init_context(config: AppConfig) -> Dict[str, Any]:
@@ -34,10 +37,9 @@ def init_context(config: AppConfig) -> Dict[str, Any]:
         "intents_history": {},
         "decisions_history": {},
     }
-    log_stage(
-        "BOOT",
-        "Инициализация базового in‑memory контекста",
-        sections=sorted(ctx.keys()),
+    log_info(
+        f"🚀 [BOOT] Инициализация базового in‑memory контекста | sections: {sorted(ctx.keys())}",
+        _LOG
     )
     return ctx
 
@@ -67,13 +69,9 @@ def update_market_state(
         }
         cache.update_ticker(ticker)
 
-    log_stage(
-        "FEEDS",
-        "Обновление market‑state по тику",
-        symbol=symbol,
-        price=price,
-        ts=ts,
-        has_cache=isinstance(cache, IMarketCache),
+    log_info(
+        f"🌐 [FEEDS] Обновление market‑state по тику | symbol: {symbol} | price: {price:.8f} | ts: {ts} | has_cache: {isinstance(cache, IMarketCache)}",
+        _LOG
     )
 
 
@@ -81,7 +79,7 @@ def update_metrics(context: Dict[str, Any], tick_id: int) -> None:
     m = context.get("metrics", {})
     m["ticks"] = tick_id
     context["metrics"] = m
-    log_stage("STATE", "Обновление метрик состояния", tick_id=tick_id)
+    log_info(f"📂 [STATE] Обновление метрик состояния | tick_id: {tick_id}", _LOG)
 
 
 def _get_window_size_for_symbol(context: Dict[str, Any], symbol: str, *, default: int = 1000) -> int:
@@ -137,13 +135,9 @@ def record_indicators(
     window = _get_window_size_for_symbol(context, symbol)
     truncated = _append_with_window(history_for_symbol, snapshot, maxlen=window)
 
-    log_stage(
-        "IND",
-        "Снимок индикаторов записан в историю",
-        symbol=symbol,
-        history_len=len(history_for_symbol),
-        window=window,
-        truncated=truncated,
+    log_info(
+        f"📊 [IND] Снимок индикаторов записан в историю | symbol: {symbol} | history_len: {len(history_for_symbol)} | window: {window} | truncated: {truncated}",
+        _LOG
     )
 
 
@@ -170,14 +164,9 @@ def record_intents(
     window = _get_window_size_for_symbol(context, symbol)
     truncated = _append_with_window(history_for_symbol, intents, maxlen=window)
 
-    log_stage(
-        "STATE",
-        "Intents сохранены в истории",
-        symbol=symbol,
-        intents_count=len(intents),
-        history_len=len(history_for_symbol),
-        window=window,
-        truncated=truncated,
+    log_info(
+        f"📂 [STATE] Intents сохранены в истории | symbol: {symbol} | intents_count: {len(intents)} | history_len: {len(history_for_symbol)} | window: {window} | truncated: {truncated}",
+        _LOG
     )
 
 
@@ -200,14 +189,10 @@ def record_decision(
     window = _get_window_size_for_symbol(context, symbol)
     truncated = _append_with_window(history_for_symbol, decision, maxlen=window)
 
-    log_stage(
-        "STATE",
-        "Решение оркестратора сохранено в истории",
-        symbol=symbol,
-        action=decision.get("action"),
-        history_len=len(history_for_symbol),
-        window=window,
-        truncated=truncated,
+    action = decision.get("action")
+    log_info(
+        f"📂 [STATE] Решение оркестратора сохранено в истории | symbol: {symbol} | action: {action} | history_len: {len(history_for_symbol)} | window: {window} | truncated: {truncated}",
+        _LOG
     )
 
 
@@ -243,14 +228,9 @@ def make_state_snapshot(
         "metrics": metrics,
     }
 
-    log_stage(
-        "STATE",
-        "Формирование снапшота state",
-        symbol=symbol,
-        tick_id=tick_id,
-        has_market=market is not None,
-        has_indicators=indicators is not None,
-        intents_count=len(intents),
+    log_info(
+        f"📂 [STATE] Формирование снапшота state | symbol: {symbol} | tick_id: {tick_id} | has_market: {market is not None} | has_indicators: {indicators is not None} | intents_count: {len(intents)}",
+        _LOG
     )
 
     return snapshot
@@ -294,10 +274,8 @@ def apply_state_snapshot(
     if metrics:
         context["metrics"] = dict(metrics)
 
-    log_stage(
-        "LOAD",
-        "Снапшот state применён к контексту",
-        symbol=symbol,
-        tick_id=snapshot.get("tick_id"),
+    log_info(
+        f"📦 [LOAD] Снапшот state применён к контексту | symbol: {symbol} | tick_id: {snapshot.get('tick_id')}",
+        _LOG
     )
 

@@ -1,6 +1,9 @@
 from typing import Dict, Any
 
-from src.infrastructure.logging.logging_setup import log_stage
+from src.infrastructure.logging.logging_setup import log_info
+
+# Имя логгера для этого модуля
+_LOG = __name__
 
 
 def execute(decision: Dict[str, Any], context: Dict[str, Any], *, tick_id: int, symbol: str) -> None:
@@ -10,12 +13,10 @@ def execute(decision: Dict[str, Any], context: Dict[str, Any], *, tick_id: int, 
     сервис; сейчас мы лишь фиксируем намерение в логах.
     """
 
-    log_stage(
-        "EXEC",
-        "Исполнение решения стратегии (заглушка)",
-        tick_id=tick_id,
-        symbol=symbol,
-        action=decision.get("action"),
-        reason=decision.get("reason"),
+    action = decision.get("action")
+    reason = decision.get("reason")
+    log_info(
+        f"⚙️ [EXEC] Исполнение решения стратегии (заглушка) | tick_id: {tick_id} | symbol: {symbol} | action: {action} | reason: {reason}",
+        _LOG
     )
 

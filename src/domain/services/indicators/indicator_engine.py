@@ -4,7 +4,10 @@ from typing import Any, Deque, Dict
 from src.domain.interfaces.cache import IIndicatorStore
 from src.domain.services.context.state import record_indicators
 from src.domain.services.tick.tick_source import Ticker
-from src.infrastructure.logging.logging_setup import log_stage
+from src.infrastructure.logging.logging_setup import log_stage, log_info
+
+# Имя логгера для этого модуля
+_LOG = __name__
 
 try:  # pragma: no cover - окружения без numpy/talib
     import numpy as _np  # type: ignore[import]
@@ -47,12 +50,9 @@ class IndicatorEngine:
     ) -> Dict[str, Any]:
         last_price = float(ticker["last"])
 
-        log_stage(
-            "IND",
-            "Расчёт индикаторов по тикеру",
-            tick_id=tick_id,
-            symbol=symbol,
-            price=last_price,
+        log_info(
+            f"📊 [IND] Расчёт индикаторов по тикеру | tick_id: {tick_id} | symbol: {symbol} | price: {last_price:.8f}",
+            _LOG
         )
 
         # --- История цен по инструменту (общая для всех индикаторов) ---
@@ -140,10 +140,9 @@ class IndicatorEngine:
                         if len(rsi_15) > 0 and not _np.isnan(rsi_15[-1]):
                             indicators["rsi_15"] = round(float(rsi_15[-1]), 8)
                     except Exception as exc:  # pragma: no cover - защитный путь
-                        log_stage(
-                            "WARN",
-                            "Ошибка при расчёте RSI через ta-lib",
-                            error=str(exc),
+                        log_info(
+                            f"⚠️ [WARN] Ошибка при расчёте RSI через ta-lib | error: {exc}",
+                            _LOG
                         )
 
                 # История medium‑слоя для возможных альтернативных
@@ -215,10 +214,9 @@ class IndicatorEngine:
                         indicators["signal_strength"] = round(signal_strength, 2)
                         indicators["trend_signal"] = trend_signal
                     except Exception as exc:  # pragma: no cover - защитный путь
-                        log_stage(
-                            "WARN",
-                            "Ошибка при расчёте MACD/BBands через ta-lib",
-                            error=str(exc),
+                        log_info(
+                            f"⚠️ [WARN] Ошибка при расчёте MACD/BBands через ta-lib | error: {exc}",
+                            _LOG
                         )
 
                 # История heavy‑слоя.
@@ -253,15 +251,13 @@ class IndicatorEngine:
         # вызывающего кода.
         record_indicators(context, symbol=symbol, snapshot=snapshot)
 
-        log_stage(
-            "IND",
-            "Снимок индикаторов сформирован",
-            tick_id=tick_id,
-            symbol=symbol,
-            sma=snapshot["sma"],
-            has_fast="sma_fast_5" in snapshot,
-            has_medium="sma_medium_20" in snapshot,
-            has_heavy="sma_heavy_100" in snapshot,
+        has_fast = "sma_fast_5" in snapshot
+        has_medium = "sma_medium_20" in snapshot
+        has_heavy = "sma_heavy_100" in snapshot
+        log_info(
+            f"📊 [IND] Снимок индикаторов сформирован | tick_id: {tick_id} | symbol: {symbol} | "
+            f"sma: {snapshot['sma']:.8f} | has_fast: {has_fast} | has_medium: {has_medium} | has_heavy: {has_heavy}",
+            _LOG
         )
         return snapshot
 
