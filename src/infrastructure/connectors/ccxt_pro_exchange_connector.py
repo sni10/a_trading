@@ -24,7 +24,7 @@ from typing import Any
 from src.config.config import AppConfig
 from src.infrastructure.connectors.interfaces.exchange_connector import (
     IExchangeConnector,
-    UnifiedTick,
+    UnifiedTicker,
 )
 from src.infrastructure.logging.logging_setup import log_stage
 
@@ -78,7 +78,7 @@ class CcxtProExchangeConnector(IExchangeConnector):
     async def close(self) -> None:
         await self._exchange.close()
 
-    async def stream_ticks(self, symbol: str) -> AsyncIterator[UnifiedTick]:
+    async def stream_ticks(self, symbol: str) -> AsyncIterator[UnifiedTicker]:
         """Асинхронный поток тиков через ``watch_tickers``.
 
         На выходе всегда выдаётся унифицированный тик ``{"symbol", "price", "ts"}``.
@@ -94,8 +94,8 @@ class CcxtProExchangeConnector(IExchangeConnector):
             price = float(raw["last"])
             ts = int(raw["timestamp"])
 
-            # Приведение к унифицированному контракту UnifiedTick.
-            yield UnifiedTick(symbol=symbol, price=price, ts=ts)
+            # Приведение к унифицированному контракту UnifiedTicker.
+            yield UnifiedTicker(symbol=symbol, price=price, ts=ts)
 
     async def fetch_order_book(self, symbol: str) -> dict:
         """Вернуть снепшот стакана через HTTP ``fetch_order_book``.

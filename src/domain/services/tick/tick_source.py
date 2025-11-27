@@ -18,7 +18,7 @@ from src.infrastructure.connectors.interfaces.exchange_connector import (
 )
 
 
-class Tick(TypedDict):
+class Ticker(TypedDict):
     symbol: str
     price: float
     ts: int  # unix‑timestamp в миллисекундах
@@ -38,20 +38,20 @@ class TickSource:
         self._connector = connector
         self._symbol = symbol
 
-    async def stream(self) -> AsyncIterator[Tick]:
+    async def stream(self) -> AsyncIterator[Ticker]:
         """Асинхронно итерироваться по унифицированным тикам.
 
         Коннектор уже возвращает структуру ``{"symbol", "price", "ts"}``,
-        но через ``Tick`` мы дополнительно фиксируем контракт на уровне
+        но через ``Ticker`` мы дополнительно фиксируем контракт на уровне
         типов домена.
         """
 
         async for raw in self._connector.stream_ticks(self._symbol):
-            yield Tick(
+            yield Ticker(
                 symbol=str(raw["symbol"]),
                 price=float(raw["price"]),
                 ts=int(raw["ts"]),
             )
 
 
-__all__ = ["Tick", "TickSource"]
+__all__ = ["Ticker", "TickSource"]

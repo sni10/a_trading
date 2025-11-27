@@ -12,10 +12,10 @@ from src.application.workers.order_book_refresh_worker import (
 from src.config.config import AppConfig
 from src.domain.interfaces.cache import IMarketCache
 from src.domain.services.indicators.indicator_engine import compute_indicators
-from src.domain.services.tick.tick_source import Tick, TickSource
+from src.domain.services.tick.tick_source import Ticker, TickSource
 from src.infrastructure.connectors.interfaces.exchange_connector import (
     IExchangeConnector,
-    UnifiedTick,
+    UnifiedTicker,
 )
 
 
@@ -26,16 +26,16 @@ class FakeExchangeConnector(IExchangeConnector):
     тиков и один снимок стакана.
     """
 
-    def __init__(self, ticks: List[Tick], order_book: Dict[str, Any]) -> None:
+    def __init__(self, ticks: List[Ticker], order_book: Dict[str, Any]) -> None:
         self._ticks = deque(ticks)
         self._order_book = order_book
 
-    async def stream_ticks(self, symbol: str) -> AsyncIterator[UnifiedTick]:  # type: ignore[override]
+    async def stream_ticks(self, symbol: str) -> AsyncIterator[UnifiedTicker]:  # type: ignore[override]
         while self._ticks:
-            # Приводим доменный Tick к инфраструктурному UnifiedTick,
+            # Приводим доменный Ticker к инфраструктурному UnifiedTicker,
             # чтобы соответствовать контракту IExchangeConnector.
             tick = self._ticks.popleft()
-            yield UnifiedTick(symbol=tick["symbol"], price=tick["price"], ts=tick["ts"])
+            yield UnifiedTicker(symbol=tick["symbol"], price=tick["price"], ts=tick["ts"])
 
     async def fetch_order_book(self, symbol: str) -> dict:  # type: ignore[override]
         return self._order_book
@@ -72,8 +72,8 @@ class FakeMarketCache(IMarketCache):  # type: ignore[misc]
         return []
 
 
-async def _drain_tick_source(source: TickSource, limit: int) -> List[Tick]:
-    result: List[Tick] = []
+async def _drain_tick_source(source: TickSource, limit: int) -> List[Ticker]:
+    result: List[Ticker] = []
     async for tick in source.stream():
         result.append(tick)
         if len(result) >= limit:
@@ -84,9 +84,9 @@ async def _drain_tick_source(source: TickSource, limit: int) -> List[Tick]:
 @pytest.mark.unit
 def test_tick_source_streams_unified_ticks() -> None:
     symbol = "BTC/USDT"
-    ticks: List[Tick] = [
-        Tick(symbol=symbol, price=100.0, ts=1),
-        Tick(symbol=symbol, price=101.0, ts=2),
+    ticks: List[Ticker] = [
+        Ticker(symbol=symbol, price=100.0, ts=1),
+        Ticker(symbol=symbol, price=101.0, ts=2),
     ]
 
     connector = FakeExchangeConnector(ticks=ticks, order_book={})

@@ -20,7 +20,7 @@ from collections.abc import AsyncIterator
 from typing import Protocol, TypedDict
 
 
-class UnifiedTick(TypedDict):
+class UnifiedTicker(TypedDict):
     """Унифицированный тик, возвращаемый биржевым коннектором.
 
     Используется во всех реализациях :class:`IExchangeConnector`.
@@ -32,7 +32,7 @@ class UnifiedTick(TypedDict):
 
 
 class IExchangeConnector(Protocol):
-    async def stream_ticks(self, symbol: str) -> AsyncIterator[UnifiedTick]:
+    async def stream_ticks(self, symbol: str) -> AsyncIterator[UnifiedTicker]:
         """Асинхронный поток тиков вида ``{"symbol", "price", "ts"}``.
 
         Контракт одного тика (минимум):
@@ -65,4 +65,4 @@ class IExchangeConnector(Protocol):
         """
 
 
-__all__ = ["IExchangeConnector", "UnifiedTick"]
+__all__ = ["IExchangeConnector", "UnifiedTicker"]
