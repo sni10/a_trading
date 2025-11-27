@@ -24,7 +24,6 @@ from typing import Any
 from src.config.config import AppConfig
 from src.infrastructure.connectors.interfaces.exchange_connector import (
     IExchangeConnector,
-    UnifiedTicker,
 )
 from src.infrastructure.logging.logging_setup import log_stage
 
@@ -78,10 +77,13 @@ class CcxtProExchangeConnector(IExchangeConnector):
     async def close(self) -> None:
         await self._exchange.close()
 
-    async def stream_ticks(self, symbol: str) -> AsyncIterator[UnifiedTicker]:
+    async def stream_ticks(self, symbol: str) -> AsyncIterator[dict[str, Any]]:
         """Асинхронный поток тиков через ``watch_tickers``.
 
-        На выходе всегда выдаётся унифицированный тик ``{"symbol", "price", "ts"}``.
+        На выходе всегда выдаётся тикер, совместимый с структурой
+        CCXT ``fetch_ticker()`` (см. ``doc/ccxt_data_structures.md``),
+        как минимум с полями ``symbol``, ``last``, ``timestamp``,
+        ``datetime``.
         """
 
         symbols = [symbol]
@@ -91,11 +93,17 @@ class CcxtProExchangeConnector(IExchangeConnector):
             tickers: dict[str, Any] = await self._exchange.watch_tickers(symbols)
 
             raw = tickers[symbol]
-            price = float(raw["last"])
-            ts = int(raw["timestamp"])
 
-            # Приведение к унифицированному контракту UnifiedTicker.
-            yield UnifiedTicker(symbol=symbol, price=price, ts=ts)
+            # Приведение к минимальному контракту CCXT‑тикера.
+            yield {
+                "symbol": str(raw.get("symbol", symbol)),
+                "last": float(raw["last"]),
+                "timestamp": int(raw["timestamp"]),
+                "datetime": str(raw["datetime"]),
+                # дополнительные поля CCXT-тикера, если они нужны домену,
+                # могут быть прокинуты здесь позднее без изменения базового
+                # контракта
+            }
 
     async def fetch_order_book(self, symbol: str) -> dict:
         """Вернуть снепшот стакана через HTTP ``fetch_order_book``.

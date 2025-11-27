@@ -15,7 +15,6 @@ from src.domain.services.indicators.indicator_engine import compute_indicators
 from src.domain.services.tick.tick_source import Ticker, TickSource
 from src.infrastructure.connectors.interfaces.exchange_connector import (
     IExchangeConnector,
-    UnifiedTicker,
 )
 
 
@@ -30,12 +29,16 @@ class FakeExchangeConnector(IExchangeConnector):
         self._ticks = deque(ticks)
         self._order_book = order_book
 
-    async def stream_ticks(self, symbol: str) -> AsyncIterator[UnifiedTicker]:  # type: ignore[override]
+    async def stream_ticks(self, symbol: str) -> AsyncIterator[Ticker]:  # type: ignore[override]
         while self._ticks:
-            # Приводим доменный Ticker к инфраструктурному UnifiedTicker,
-            # чтобы соответствовать контракту IExchangeConnector.
+            # Вернём тик в унифицированном формате, совместимом с доменным Ticker.
             tick = self._ticks.popleft()
-            yield UnifiedTicker(symbol=tick["symbol"], price=tick["price"], ts=tick["ts"])
+            yield Ticker(
+                symbol=tick["symbol"],
+                last=tick["last"],
+                timestamp=tick["timestamp"],
+                datetime=tick["datetime"],
+            )
 
     async def fetch_order_book(self, symbol: str) -> dict:  # type: ignore[override]
         return self._order_book
@@ -85,8 +88,8 @@ async def _drain_tick_source(source: TickSource, limit: int) -> List[Ticker]:
 def test_tick_source_streams_unified_ticks() -> None:
     symbol = "BTC/USDT"
     ticks: List[Ticker] = [
-        Ticker(symbol=symbol, price=100.0, ts=1),
-        Ticker(symbol=symbol, price=101.0, ts=2),
+        Ticker(symbol=symbol, last=100.0, timestamp=1, datetime="2023-01-01T00:00:00Z"),
+        Ticker(symbol=symbol, last=101.0, timestamp=2, datetime="2023-01-01T00:00:01Z"),
     ]
 
     connector = FakeExchangeConnector(ticks=ticks, order_book={})
@@ -96,8 +99,8 @@ def test_tick_source_streams_unified_ticks() -> None:
 
     assert len(out_ticks) == 2
     assert out_ticks[0]["symbol"] == symbol
-    assert out_ticks[0]["price"] == 100.0
-    assert out_ticks[1]["price"] == 101.0
+    assert out_ticks[0]["last"] == 100.0
+    assert out_ticks[1]["last"] == 101.0
 
 
 @pytest.mark.unit
