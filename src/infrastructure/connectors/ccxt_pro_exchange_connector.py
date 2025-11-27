@@ -30,10 +30,19 @@ from src.infrastructure.logging.logging_setup import log_stage
 
 try:  # pragma: no cover - защитный импорт для окружений без ccxt.pro
     import ccxt.pro as ccxt  # type: ignore[import]
-except Exception as exc:  # pragma: no cover - используется при реальном запуске
+except ModuleNotFoundError as exc:  # pragma: no cover - пакет реально не установлен
+    # Классический кейс: в окружении нет ``ccxt.pro`` как модуля.
     ccxt = None  # type: ignore[assignment]
     _ccxt_import_error = exc
-else:  # pragma: no cover - ветка с установленным ccxt.pro покрывается интеграцией
+except Exception as exc:  # pragma: no cover - другие ошибки импорта (лицензия, версия и т.п.)
+    # В этом случае модуль физически есть (``import ccxt.pro`` найден),
+    # но при инициализации внутри него произошла ошибка (например,
+    # просроченная лицензия, несовместимая версия, отсутствующие
+    # зависимости). Сохраняем исходное исключение, чтобы показать его
+    # в тексте ошибки при создании коннектора.
+    ccxt = None  # type: ignore[assignment]
+    _ccxt_import_error = exc
+else:  # pragma: no cover - ветка с успешно установленным ccxt.pro
     _ccxt_import_error = None
 
 
@@ -47,9 +56,33 @@ class CcxtProExchangeConnector(IExchangeConnector):
     def __init__(self, config: AppConfig) -> None:
         if ccxt is None:
             # Отложенное поднятие ошибки при попытке реального использования.
-            raise RuntimeError(
-                "ccxt.pro не установлен: невозможно создать CcxtProExchangeConnector"
-            ) from _ccxt_import_error
+            #
+            # Если ``ccxt`` / ``ccxt.pro`` действительно не установлены в
+            # активном окружении, то ``_ccxt_import_error`` будет
+            # ``ModuleNotFoundError``. В этом случае даём максимально
+            # прикладную подсказку по установке. Во всех остальных
+            # случаях (ошибка лицензии, несовместимая версия,
+            # проблемы внутри модуля) мы не маскируем исходную причину,
+            # а включаем её в текст.
+
+            if isinstance(_ccxt_import_error, ModuleNotFoundError):
+                detailed_msg = (
+                    "Невозможно создать CcxtProExchangeConnector: пакет 'ccxt' или "
+                    "'ccxt.pro' не найден в активном окружении. "
+                    "Убедитесь, что вы активировали правильное virtualenv и "
+                    "выполнили 'pip install ccxt ccxtpro'. Исходная ошибка: "
+                    f"{_ccxt_import_error!r}"
+                )
+            else:
+                base_msg = (
+                    "Невозможно создать CcxtProExchangeConnector: ошибка импорта ccxt.pro"
+                )
+                if _ccxt_import_error is not None:
+                    detailed_msg = f"{base_msg}: {_ccxt_import_error!r}"
+                else:  # на всякий случай, не должно происходить
+                    detailed_msg = base_msg
+
+            raise RuntimeError(detailed_msg) from _ccxt_import_error
 
         self._config = config
 
