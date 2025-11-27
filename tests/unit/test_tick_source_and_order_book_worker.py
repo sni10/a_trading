@@ -35,9 +35,17 @@ class FakeExchangeConnector(IExchangeConnector):
             tick = self._ticks.popleft()
             yield Ticker(
                 symbol=tick["symbol"],
-                last=tick["last"],
                 timestamp=tick["timestamp"],
                 datetime=tick["datetime"],
+                last=tick["last"],
+                open=tick["open"],
+                high=tick["high"],
+                low=tick["low"],
+                close=tick["close"],
+                bid=tick["bid"],
+                ask=tick["ask"],
+                baseVolume=tick["baseVolume"],
+                quoteVolume=tick["quoteVolume"],
             )
 
     async def fetch_order_book(self, symbol: str) -> dict:  # type: ignore[override]
@@ -88,8 +96,34 @@ async def _drain_tick_source(source: TickSource, limit: int) -> List[Ticker]:
 def test_tick_source_streams_unified_ticks() -> None:
     symbol = "BTC/USDT"
     ticks: List[Ticker] = [
-        Ticker(symbol=symbol, last=100.0, timestamp=1, datetime="2023-01-01T00:00:00Z"),
-        Ticker(symbol=symbol, last=101.0, timestamp=2, datetime="2023-01-01T00:00:01Z"),
+        Ticker(
+            symbol=symbol,
+            timestamp=1,
+            datetime="2023-01-01T00:00:00Z",
+            last=100.0,
+            open=100.0,
+            high=100.0,
+            low=100.0,
+            close=100.0,
+            bid=99.5,
+            ask=100.5,
+            baseVolume=1.0,
+            quoteVolume=100.0,
+        ),
+        Ticker(
+            symbol=symbol,
+            timestamp=2,
+            datetime="2023-01-01T00:00:01Z",
+            last=101.0,
+            open=101.0,
+            high=101.0,
+            low=101.0,
+            close=101.0,
+            bid=100.5,
+            ask=101.5,
+            baseVolume=2.0,
+            quoteVolume=202.0,
+        ),
     ]
 
     connector = FakeExchangeConnector(ticks=ticks, order_book={})

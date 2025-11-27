@@ -16,26 +16,45 @@ from typing import TypedDict
 from src.infrastructure.connectors.interfaces.exchange_connector import (
     IExchangeConnector,
 )
+
+
 class Ticker(TypedDict):
     """Доменный тикер в формате CCXT ``fetch_ticker()``.
 
-    Мы используем минимальный поднабор полей из структуры
-    ``fetch_ticker()`` (см. ``doc/ccxt_data_structures.md``):
+    Структура основана на контракте ``fetch_ticker()`` из
+    ``doc/ccxt_data_structures.md``. Мы фиксируем подмножество полей,
+    достаточное для расчёта индикаторов и фильтров ликвидности.
+
+    Обязательные поля:
 
     * ``symbol`` – строковый символ пары, например ``"BTC/USDT"``;
-    * ``last`` – последняя цена сделки;
     * ``timestamp`` – Unix‑время в миллисекундах;
-    * ``datetime`` – ISO‑строка, соответствующая ``timestamp``.
+    * ``datetime`` – ISO‑строка, соответствующая ``timestamp``;
+    * ``last`` – последняя цена сделки (используется как текущая цена);
+    * ``open`` / ``high`` / ``low`` / ``close`` – цены суточной статистики;
+    * ``bid`` / ``ask`` – лучшие цены покупателя/продавца;
+    * ``baseVolume`` / ``quoteVolume`` – объёмы базовой и котируемой валют.
 
-    Остальные поля CCXT‑тикера (``high``, ``low``, ``bid`` и т.п.)
-    на этом этапе не требуются домену и могут быть добавлены позже
-    без изменения базового контракта.
+    При необходимости дополнительные поля CCXT‑тикера (``vwap``,
+    ``percentage``, ``change``, ``average`` и т.п.) могут быть добавлены
+    в этот TypedDict без изменения базового контракта домена.
     """
 
     symbol: str
-    last: float
     timestamp: int
     datetime: str
+
+    last: float
+    open: float
+    high: float
+    low: float
+    close: float
+
+    bid: float
+    ask: float
+
+    baseVolume: float
+    quoteVolume: float
 
 
 class TickSource:
@@ -57,7 +76,11 @@ class TickSource:
 
         Ожидается, что коннектор возвращает структуру, совместимую с
         ``fetch_ticker()`` (см. ``doc/ccxt_data_structures.md``), как
-        минимум с полями ``symbol``, ``last``, ``timestamp``, ``datetime``.
+        минимум с полями:
+
+        * ``symbol``, ``timestamp``, ``datetime``;
+        * ``last``, ``open``, ``high``, ``low``, ``close``;
+        * ``bid``, ``ask``, ``baseVolume``, ``quoteVolume``.
 
         Здесь мы лишь жёстко приводим типы и фиксируем контракт через
         :class:`Ticker`.
@@ -66,9 +89,17 @@ class TickSource:
         async for raw in self._connector.stream_ticks(self._symbol):
             yield Ticker(
                 symbol=str(raw["symbol"]),
-                last=float(raw["last"]),
                 timestamp=int(raw["timestamp"]),
                 datetime=str(raw["datetime"]),
+                last=float(raw["last"]),
+                open=float(raw["open"]),
+                high=float(raw["high"]),
+                low=float(raw["low"]),
+                close=float(raw["close"]),
+                bid=float(raw["bid"]),
+                ask=float(raw["ask"]),
+                baseVolume=float(raw["baseVolume"]),
+                quoteVolume=float(raw["quoteVolume"]),
             )
 
 

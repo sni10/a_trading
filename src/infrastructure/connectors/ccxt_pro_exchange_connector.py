@@ -82,8 +82,14 @@ class CcxtProExchangeConnector(IExchangeConnector):
 
         На выходе всегда выдаётся тикер, совместимый с структурой
         CCXT ``fetch_ticker()`` (см. ``doc/ccxt_data_structures.md``),
-        как минимум с полями ``symbol``, ``last``, ``timestamp``,
-        ``datetime``.
+        как минимум с полями:
+
+        * ``symbol``, ``timestamp``, ``datetime``;
+        * ``last``, ``open``, ``high``, ``low``, ``close``;
+        * ``bid``, ``ask``, ``baseVolume``, ``quoteVolume``.
+
+        Остальные поля оригинального CCXT‑тикера при необходимости
+        могут быть добавлены без изменения контракта домена.
         """
 
         symbols = [symbol]
@@ -97,12 +103,17 @@ class CcxtProExchangeConnector(IExchangeConnector):
             # Приведение к минимальному контракту CCXT‑тикера.
             yield {
                 "symbol": str(raw.get("symbol", symbol)),
-                "last": float(raw["last"]),
                 "timestamp": int(raw["timestamp"]),
                 "datetime": str(raw["datetime"]),
-                # дополнительные поля CCXT-тикера, если они нужны домену,
-                # могут быть прокинуты здесь позднее без изменения базового
-                # контракта
+                "last": float(raw["last"]),
+                "open": float(raw["open"]),
+                "high": float(raw["high"]),
+                "low": float(raw["low"]),
+                "close": float(raw["close"]),
+                "bid": float(raw["bid"]),
+                "ask": float(raw["ask"]),
+                "baseVolume": float(raw["baseVolume"]),
+                "quoteVolume": float(raw["quoteVolume"]),
             }
 
     async def fetch_order_book(self, symbol: str) -> dict:
