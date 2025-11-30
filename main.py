@@ -32,7 +32,7 @@ def _parse_cli_pair(argv: list[str]) -> str:
     if len(argv) < 2:
         raise SystemExit("Usage: python main.py BTC/USDT")
 
-    symbol = argv[1].strip()
+    symbol = argv[1].strip().upper()
     if "/" not in symbol or symbol.count("/") != 1:
         raise SystemExit(
             f"Invalid pair symbol: {symbol!r}. Expected format BASE/QUOTE, e.g. BTC/USDT"
