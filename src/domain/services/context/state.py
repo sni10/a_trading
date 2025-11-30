@@ -2,13 +2,14 @@ from typing import Dict, Any, List
 
 from src.config.config import AppConfig
 from src.domain.interfaces.cache import IMarketCache
-from src.infrastructure.logging.logging_setup import log_info
-
-# Имя логгера для этого модуля
-_LOG = __name__
+from src.domain.interfaces.logger import ILogger
 
 
-def init_context(config: AppConfig) -> Dict[str, Any]:
+def init_context(
+    config: AppConfig,
+    *,
+    logger: ILogger | None = None,
+) -> Dict[str, Any]:
     """Создать in-memory контекст с обязательными разделами.
 
     На вход принимает типизированный :class:`AppConfig` и кладёт его
@@ -37,15 +38,21 @@ def init_context(config: AppConfig) -> Dict[str, Any]:
         "intents_history": {},
         "decisions_history": {},
     }
-    log_info(
-        f"🚀 [BOOT] Инициализация базового in‑memory контекста | sections: {sorted(ctx.keys())}",
-        _LOG
-    )
+
+    if logger:
+        logger.log_info(
+            f"🚀 [BOOT] Инициализация базового in‑memory контекста | sections: {sorted(ctx.keys())}"
+        )
     return ctx
 
 
 def update_market_state(
-    context: Dict[str, Any], *, symbol: str, price: float, ts: int
+    context: Dict[str, Any],
+    *,
+    symbol: str,
+    price: float,
+    ts: int,
+    logger: ILogger | None = None,
 ) -> None:
     """Обновить разделы ``market`` и ``market_caches`` по простому тику.
 
@@ -69,17 +76,26 @@ def update_market_state(
         }
         cache.update_ticker(ticker)
 
-    log_info(
-        f"🌐 [FEEDS] Обновление market‑state по тику | symbol: {symbol} | price: {price:.8f} | ts: {ts} | has_cache: {isinstance(cache, IMarketCache)}",
-        _LOG
-    )
+    if logger:
+        logger.log_info(
+            f"🌐 [FEEDS] Обновление market‑state по тику | symbol: {symbol} | price: {price:.8f} | ts: {ts} | has_cache: {isinstance(cache, IMarketCache)}"
+        )
 
 
-def update_metrics(context: Dict[str, Any], ticker_id: int) -> None:
+def update_metrics(
+    context: Dict[str, Any],
+    ticker_id: int,
+    *,
+    logger: ILogger | None = None,
+) -> None:
     m = context.get("metrics", {})
     m["ticks"] = ticker_id
     context["metrics"] = m
-    log_info(f"📂 [STATE] Обновление метрик состояния | ticker_id: {ticker_id}", _LOG)
+
+    if logger:
+        logger.log_info(
+            f"📂 [STATE] Обновление метрик состояния | ticker_id: {ticker_id}"
+        )
 
 
 def _get_window_size_for_symbol(context: Dict[str, Any], symbol: str, *, default: int = 1000) -> int:
@@ -113,7 +129,11 @@ def _append_with_window(sequence: List[Any], item: Any, *, maxlen: int) -> bool:
 
 
 def record_indicators(
-    context: Dict[str, Any], *, symbol: str, snapshot: Dict[str, Any]
+    context: Dict[str, Any],
+    *,
+    symbol: str,
+    snapshot: Dict[str, Any],
+    logger: ILogger | None = None,
 ) -> None:
     """Сохранить снимок индикаторов в контекст и его историю.
 
@@ -135,14 +155,18 @@ def record_indicators(
     window = _get_window_size_for_symbol(context, symbol)
     truncated = _append_with_window(history_for_symbol, snapshot, maxlen=window)
 
-    log_info(
-        f"📊 [IND] Снимок индикаторов записан в историю | symbol: {symbol} | history_len: {len(history_for_symbol)} | window: {window} | truncated: {truncated}",
-        _LOG
-    )
+    if logger:
+        logger.log_info(
+            f"📊 [IND] Снимок индикаторов записан в историю | symbol: {symbol} | history_len: {len(history_for_symbol)} | window: {window} | truncated: {truncated}"
+        )
 
 
 def record_intents(
-    context: Dict[str, Any], *, symbol: str, intents: List[Dict[str, Any]]
+    context: Dict[str, Any],
+    *,
+    symbol: str,
+    intents: List[Dict[str, Any]],
+    logger: ILogger | None = None,
 ) -> None:
     """Сохранить intents стратегий в последний срез и историю.
 
@@ -159,19 +183,25 @@ def record_intents(
     current[symbol] = intents
 
     history_all = context.setdefault("intents_history", {})
-    history_for_symbol: List[List[Dict[str, Any]]] = history_all.setdefault(symbol, [])
+    history_for_symbol: List[List[Dict[str, Any]]] = history_all.setdefault(
+        symbol, []
+    )
 
     window = _get_window_size_for_symbol(context, symbol)
     truncated = _append_with_window(history_for_symbol, intents, maxlen=window)
 
-    log_info(
-        f"📂 [STATE] Intents сохранены в истории | symbol: {symbol} | intents_count: {len(intents)} | history_len: {len(history_for_symbol)} | window: {window} | truncated: {truncated}",
-        _LOG
-    )
+    if logger:
+        logger.log_info(
+            f"📂 [STATE] Intents сохранены в истории | symbol: {symbol} | intents_count: {len(intents)} | history_len: {len(history_for_symbol)} | window: {window} | truncated: {truncated}"
+        )
 
 
 def record_decision(
-    context: Dict[str, Any], *, symbol: str, decision: Dict[str, Any]
+    context: Dict[str, Any],
+    *,
+    symbol: str,
+    decision: Dict[str, Any],
+    logger: ILogger | None = None,
 ) -> None:
     """Сохранить финальное решение оркестратора в срез и историю.
 
@@ -189,15 +219,19 @@ def record_decision(
     window = _get_window_size_for_symbol(context, symbol)
     truncated = _append_with_window(history_for_symbol, decision, maxlen=window)
 
-    action = decision.get("action")
-    log_info(
-        f"📂 [STATE] Решение оркестратора сохранено в истории | symbol: {symbol} | action: {action} | history_len: {len(history_for_symbol)} | window: {window} | truncated: {truncated}",
-        _LOG
-    )
+    if logger:
+        action = decision.get("action")
+        logger.log_info(
+            f"📂 [STATE] Решение оркестратора сохранено в истории | symbol: {symbol} | action: {action} | history_len: {len(history_for_symbol)} | window: {window} | truncated: {truncated}"
+        )
 
 
 def make_state_snapshot(
-    context: Dict[str, Any], *, symbol: str, ticker_id: int
+    context: Dict[str, Any],
+    *,
+    symbol: str,
+    ticker_id: int,
+    logger: ILogger | None = None,
 ) -> Dict[str, Any]:
     """Сформировать сериализуемый снапшот state для указанного инструмента.
 
@@ -228,16 +262,20 @@ def make_state_snapshot(
         "metrics": metrics,
     }
 
-    log_info(
-        f"📂 [STATE] Формирование снапшота state | symbol: {symbol} | ticker_id: {ticker_id} | has_market: {market is not None} | has_indicators: {indicators is not None} | intents_count: {len(intents)}",
-        _LOG
-    )
+    if logger:
+        logger.log_info(
+            f"📂 [STATE] Формирование снапшота state | symbol: {symbol} | ticker_id: {ticker_id} | has_market: {market is not None} | has_indicators: {indicators is not None} | intents_count: {len(intents)}"
+        )
 
     return snapshot
 
 
 def apply_state_snapshot(
-    context: Dict[str, Any], *, symbol: str, snapshot: Dict[str, Any]
+    context: Dict[str, Any],
+    *,
+    symbol: str,
+    snapshot: Dict[str, Any],
+    logger: ILogger | None = None,
 ) -> None:
     """Применить ранее сохранённый снапшот к текущему контексту.
 
@@ -274,8 +312,8 @@ def apply_state_snapshot(
     if metrics:
         context["metrics"] = dict(metrics)
 
-    log_info(
-        f"📦 [LOAD] Снапшот state применён к контексту | symbol: {symbol} | ticker_id: {snapshot.get('ticker_id')}",
-        _LOG
-    )
+    if logger:
+        logger.log_info(
+            f"📦 [LOAD] Снапшот state применён к контексту | symbol: {symbol} | ticker_id: {snapshot.get('ticker_id')}"
+        )
 

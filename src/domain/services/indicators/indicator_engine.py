@@ -2,12 +2,9 @@ from collections import deque
 from typing import Any, Deque, Dict
 
 from src.domain.interfaces.cache import IIndicatorStore
+from src.domain.interfaces.logger import ILogger
 from src.domain.services.context.state import record_indicators
 from src.domain.services.ticker.ticker_source import Ticker
-from src.infrastructure.logging.logging_setup import log_stage, log_info
-
-# Имя логгера для этого модуля
-_LOG = __name__
 
 try:  # pragma: no cover - окружения без numpy/talib
     import numpy as _np  # type: ignore[import]
@@ -40,6 +37,9 @@ class IndicatorEngine:
     * сохраняет снимок через :func:`record_indicators` и возвращает его.
     """
 
+    def __init__(self, logger: ILogger | None = None) -> None:
+        self._logger = logger
+
     def on_ticker(
         self,
         context: Dict[str, Any],
@@ -50,10 +50,10 @@ class IndicatorEngine:
     ) -> Dict[str, Any]:
         last_price = float(ticker["last"])
 
-        log_info(
-            f"📊 [IND] Расчёт индикаторов по тикеру | ticker_id: {ticker_id} | symbol: {symbol} | price: {last_price:.8f}",
-            _LOG
-        )
+        if self._logger:
+            self._logger.log_info(
+                f"📊 [IND] Расчёт индикаторов по тикеру | ticker_id: {ticker_id} | symbol: {symbol} | price: {last_price:.8f}"
+            )
 
         # --- История цен по инструменту (общая для всех индикаторов) ---
         price_history_root: Dict[str, Deque[float]] = context.setdefault(
@@ -140,10 +140,10 @@ class IndicatorEngine:
                         if len(rsi_15) > 0 and not _np.isnan(rsi_15[-1]):
                             indicators["rsi_15"] = round(float(rsi_15[-1]), 8)
                     except Exception as exc:  # pragma: no cover - защитный путь
-                        log_info(
-                            f"⚠️ [WARN] Ошибка при расчёте RSI через ta-lib | error: {exc}",
-                            _LOG
-                        )
+                        if self._logger:
+                            self._logger.log_warning(
+                                f"⚠️ [WARN] Ошибка при расчёте RSI через ta-lib | error: {exc}"
+                            )
 
                 # История medium‑слоя для возможных альтернативных
                 # расчётов в будущем.
@@ -214,10 +214,10 @@ class IndicatorEngine:
                         indicators["signal_strength"] = round(signal_strength, 2)
                         indicators["trend_signal"] = trend_signal
                     except Exception as exc:  # pragma: no cover - защитный путь
-                        log_info(
-                            f"⚠️ [WARN] Ошибка при расчёте MACD/BBands через ta-lib | error: {exc}",
-                            _LOG
-                        )
+                        if self._logger:
+                            self._logger.log_warning(
+                                f"⚠️ [WARN] Ошибка при расчёте MACD/BBands через ta-lib | error: {exc}"
+                            )
 
                 # История heavy‑слоя.
                 store.heavy_history.append(last_price)  # type: ignore[attr-defined]
@@ -249,24 +249,31 @@ class IndicatorEngine:
         # Сохраняем снимок в общем контексте и его историю, чтобы потом
         # можно было заменить in‑memory стор на Redis/БД без правки
         # вызывающего кода.
-        record_indicators(context, symbol=symbol, snapshot=snapshot)
+        record_indicators(
+            context,
+            symbol=symbol,
+            snapshot=snapshot,
+            logger=self._logger,
+        )
 
         has_fast = "sma_fast_5" in snapshot
         has_medium = "sma_medium_20" in snapshot
         has_heavy = "sma_heavy_100" in snapshot
-        log_info(
-            f"📊 [IND] Снимок индикаторов сформирован | ticker_id: {ticker_id} | symbol: {symbol} | "
-            f"sma: {snapshot['sma']:.8f} | has_fast: {has_fast} | has_medium: {has_medium} | has_heavy: {has_heavy}",
-            _LOG
-        )
+        if self._logger:
+            self._logger.log_info(
+                f"📊 [IND] Снимок индикаторов сформирован | ticker_id: {ticker_id} | symbol: {symbol} | "
+                f"sma: {snapshot['sma']:.8f} | has_fast: {has_fast} | has_medium: {has_medium} | has_heavy: {has_heavy}"
+            )
         return snapshot
 
 
-_ENGINE = IndicatorEngine()
-
-
 def compute_indicators(
-    context: Dict[str, Any], *, ticker_id: int, symbol: str, price: float
+    context: Dict[str, Any],
+    *,
+    ticker_id: int,
+    symbol: str,
+    price: float,
+    logger: ILogger | None = None,
 ) -> Dict[str, Any]:
     """Фасад для расчёта индикаторов, совместимый с существующим API.
 
@@ -300,7 +307,8 @@ def compute_indicators(
         "quoteVolume": 0.0,
     }
 
-    return _ENGINE.on_ticker(
+    engine = IndicatorEngine(logger=logger)
+    return engine.on_ticker(
         context,
         ticker_id=ticker_id,
         symbol=symbol,
