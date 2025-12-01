@@ -4,7 +4,7 @@ from typing import Any, Dict, Iterable, List
 
 import pytest
 
-from src.application.use_cases import run_realtime_trading
+from src.application.use_cases import run_offline_demo
 
 
 class _FakeTick:
@@ -89,7 +89,7 @@ def test_run_demo_offline_uses_pipeline_for_each_generated_tick(
 
     # --- monkeypatch генератора тиков и сервисов ---
     monkeypatch.setattr(
-        run_realtime_trading,
+        run_offline_demo,
         "generate_ticks",
         lambda symbol_arg, max_ticks=max_ticks, sleep_sec=0.0: _fake_generate_ticks(
             symbol_arg,
@@ -100,14 +100,14 @@ def test_run_demo_offline_uses_pipeline_for_each_generated_tick(
 
     fake_pipeline = _FakePipeline()
     monkeypatch.setattr(
-        run_realtime_trading,
+        run_offline_demo,
         "TickPipelineService",
         lambda cfg: fake_pipeline,
     )
 
     dummy_snapshot = _DummySnapshotService()
     monkeypatch.setattr(
-        run_realtime_trading,
+        run_offline_demo,
         "StateSnapshotService",
         lambda store, cfg: dummy_snapshot,
     )
@@ -125,9 +125,9 @@ def test_run_demo_offline_uses_pipeline_for_each_generated_tick(
         cfg.ticker_sleep_sec = 0.0
         return cfg
 
-    monkeypatch.setattr(run_realtime_trading, "load_config", fake_load_config)
+    monkeypatch.setattr(run_offline_demo, "load_config", fake_load_config)
 
-    run_realtime_trading.run_demo_offline(symbol=symbol)
+    run_offline_demo.run_demo_offline(symbol=symbol)
 
     # --- проверки ---
     # Должно быть ровно max_ticks вызовов pipeline.process_tick
