@@ -1,12 +1,16 @@
 from typing import Dict, Any, List
 
-from src.infrastructure.logging.logging_setup import log_info
-
-# Имя логгера для этого модуля
-_LOG = __name__
+from src.domain.interfaces.logger import ILogger
 
 
-def decide(intents: List[Dict[str, Any]], context: Dict[str, Any], *, ticker_id: int, symbol: str) -> Dict[str, Any]:
+def decide(
+    intents: List[Dict[str, Any]],
+    context: Dict[str, Any],
+    *,
+    ticker_id: int,
+    symbol: str,
+    logger: ILogger | None = None,
+) -> Dict[str, Any]:
     """Простейший оркестратор принятия решения по intents.
 
     Контракт (на текущем этапе прототипа):
@@ -49,10 +53,10 @@ def decide(intents: List[Dict[str, Any]], context: Dict[str, Any], *, ticker_id:
       логируются только важные события (сигналы к действию).
     """
 
-    log_info(
-        f"🧩 [ORCH] Получен список intents для обработки | ticker_id: {ticker_id} | symbol: {symbol} | intents_count: {len(intents)}",
-        _LOG
-    )
+    if logger:
+        logger.log_info(
+            f"🧩 [ORCH] Получен список intents для обработки | ticker_id: {ticker_id} | symbol: {symbol} | intents_count: {len(intents)}"
+        )
 
     # Базовое решение: HOLD, если стратегий нет или все бездействуют.
     decision: Dict[str, Any] = {
@@ -101,9 +105,9 @@ def decide(intents: List[Dict[str, Any]], context: Dict[str, Any], *, ticker_id:
                     "ts": context.get("market", {}).get(symbol, {}).get("ts"),
                 }
 
-    log_info(
-        f"🧩 [ORCH] Решение принято | ticker_id: {ticker_id} | symbol: {symbol} | action: {decision.get('action')} | reason: {decision.get('reason')}",
-        _LOG
-    )
+    if logger:
+        logger.log_info(
+            f"🧩 [ORCH] Решение принято | ticker_id: {ticker_id} | symbol: {symbol} | action: {decision.get('action')} | reason: {decision.get('reason')}"
+        )
     return decision
 
