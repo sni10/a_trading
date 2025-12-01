@@ -22,9 +22,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from src.config.config import AppConfig
-from src.infrastructure.connectors.interfaces.exchange_connector import (
-    IExchangeConnector,
-)
+from src.domain.interfaces.exchange_connector import IExchangeConnector
 from src.infrastructure.logging.logging_setup import log_stage
 
 

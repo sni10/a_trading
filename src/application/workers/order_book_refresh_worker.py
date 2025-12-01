@@ -11,9 +11,7 @@ from collections.abc import Callable
 
 from src.config.config import AppConfig
 from src.domain.interfaces.cache import IMarketCache
-from src.infrastructure.connectors.interfaces.exchange_connector import (
-    IExchangeConnector,
-)
+from src.domain.interfaces.exchange_connector import IExchangeConnector
 from src.infrastructure.logging.logging_setup import log_stage
 
 

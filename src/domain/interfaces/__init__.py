@@ -7,6 +7,7 @@
 
 from .cache import IIndicatorStore, IMarketCache
 from .currency_pair_repository import ICurrencyPairRepository
+from .exchange_connector import IExchangeConnector
 from .exchange_pair_metadata_provider import (
     IExchangePairMetadataProvider,
     PairPrecisions,
@@ -19,6 +20,7 @@ __all__ = [
     "IMarketCache",
     "IIndicatorStore",
     "ICurrencyPairRepository",
+    "IExchangeConnector",
     "IExchangePairMetadataProvider",
     "PairPrecisions",
     "IStateSnapshotStore",

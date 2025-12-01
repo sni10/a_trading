@@ -11,11 +11,9 @@ from src.application.workers.order_book_refresh_worker import (
 )
 from src.config.config import AppConfig
 from src.domain.interfaces.cache import IMarketCache
+from src.domain.interfaces.exchange_connector import IExchangeConnector
 from src.domain.services.indicators.indicator_engine import compute_indicators
 from src.domain.services.ticker.ticker_source import Ticker, TickSource
-from src.infrastructure.connectors.interfaces.exchange_connector import (
-    IExchangeConnector,
-)
 
 
 class FakeExchangeConnector(IExchangeConnector):
