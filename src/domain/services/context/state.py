@@ -1,8 +1,23 @@
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 
 from src.config.config import AppConfig
-from src.domain.interfaces.cache import IMarketCache
 from src.domain.interfaces.logger import ILogger
+from src.domain.services.context.context_initializer import init_context as _init_context
+from src.domain.services.context.decision_recorder import (
+    record_decision as _record_decision,
+    record_intents as _record_intents,
+)
+from src.domain.services.context.indicator_recorder import (
+    record_indicators as _record_indicators,
+)
+from src.domain.services.context.market_state_updater import (
+    update_market_state as _update_market_state,
+    update_metrics as _update_metrics,
+)
+from src.domain.services.context.window_utils import (
+    append_with_window as _append_with_window,
+    get_window_size_for_symbol as _get_window_size_for_symbol,
+)
 
 
 def init_context(
@@ -10,40 +25,13 @@ def init_context(
     *,
     logger: ILogger | None = None,
 ) -> Dict[str, Any]:
-    """Создать in-memory контекст с обязательными разделами.
+    """Фасад для :func:`context_initializer.init_context`.
 
-    На вход принимает типизированный :class:`AppConfig` и кладёт его
-    целиком в раздел ``context["config"]`` без преобразования в dict.
-
-    Логика контекста остаётся простой: только разделы in-memory состояния,
-    без доступа к сети/БД.
+    Сохранён для обратной совместимости импортов
+    ``from src.domain.services.context.state import init_context``.
     """
 
-    ctx: Dict[str, Any] = {
-        "config": config,
-        "market": {},
-        "indicators": {},  # снимки индикаторов по инструментам (последний)
-        "positions": {},
-        "orders": {},
-        "risk": {},
-        "metrics": {"ticks": 0},
-        # История индикаторов по каждому инструменту
-        "indicators_history": {},
-        # Решения/намерения стратегий и оркестратора.
-        # Храним как последний срез по инструменту и простую историю,
-        # чтобы в будущем можно было прозрачно заменить backend на Redis
-        # или БД, не меняя бизнес‑код конвейера.
-        "intents": {},
-        "decisions": {},
-        "intents_history": {},
-        "decisions_history": {},
-    }
-
-    if logger:
-        logger.log_info(
-            f"🚀 [BOOT] Инициализация базового in‑memory контекста | sections: {sorted(ctx.keys())}"
-        )
-    return ctx
+    return _init_context(config, logger=logger)
 
 
 def update_market_state(
@@ -54,32 +42,9 @@ def update_market_state(
     ts: int,
     logger: ILogger | None = None,
 ) -> None:
-    """Обновить разделы ``market`` и ``market_caches`` по простому тику.
+    """Фасад для :func:`market_state_updater.update_market_state`."""
 
-    Используется синхронным демо‑конвейером: тик описывается минимальным
-    набором полей (``symbol``, ``price``, ``ts``). Функция не делает
-    внешнего I/O и работает только с in‑memory структурами контекста.
-    """
-
-    # Высокоуровневый срез рынка для стратегий/оркестратора.
-    market = context.setdefault("market", {})
-    market[symbol] = {"last_price": price, "ts": ts}
-
-    # Если в контексте есть кэш рынка для этой пары, обновляем и его.
-    caches = context.get("market_caches") or {}
-    cache = caches.get(symbol)
-    if isinstance(cache, IMarketCache):
-        ticker = {
-            "symbol": symbol,
-            "last": price,
-            "timestamp": ts,
-        }
-        cache.update_ticker(ticker)
-
-    if logger:
-        logger.log_info(
-            f"🌐 [FEEDS] Обновление market‑state по тику | symbol: {symbol} | price: {price:.8f} | ts: {ts} | has_cache: {isinstance(cache, IMarketCache)}"
-        )
+    _update_market_state(context, symbol=symbol, price=price, ts=ts, logger=logger)
 
 
 def update_metrics(
@@ -88,44 +53,9 @@ def update_metrics(
     *,
     logger: ILogger | None = None,
 ) -> None:
-    m = context.get("metrics", {})
-    m["ticks"] = ticker_id
-    context["metrics"] = m
+    """Фасад для :func:`market_state_updater.update_metrics`."""
 
-    if logger:
-        logger.log_info(
-            f"📂 [STATE] Обновление метрик состояния | ticker_id: {ticker_id}"
-        )
-
-
-def _get_window_size_for_symbol(context: Dict[str, Any], symbol: str, *, default: int = 1000) -> int:
-    """Вспомогательно: взять размер окна по паре, если она есть в контексте.
-
-    Сейчас используем ``CurrencyPair.indicator_window_size`` как единый
-    лимит для историй индикаторов, intents и decisions. Это позволяет
-    контролировать объём in‑memory state и в будущем заменить хранение
-    на Redis/БД без изменения вызывающего кода.
-    """
-
-    pairs = context.get("pairs") or {}
-    pair = pairs.get(symbol)
-    return getattr(pair, "indicator_window_size", default) if pair is not None else default
-
-
-def _append_with_window(sequence: List[Any], item: Any, *, maxlen: int) -> bool:
-    """Добавить элемент в список с обрезкой по ``maxlen`` с начала.
-
-    Возвращает ``True``, если при добавлении пришлось обрезать голову
-    списка (старые элементы вытеснены).
-    """
-
-    sequence.append(item)
-    truncated = False
-    if len(sequence) > maxlen:
-        # откусываем только из начала, чтобы сохранить порядок последних
-        del sequence[0 : len(sequence) - maxlen]
-        truncated = True
-    return truncated
+    _update_metrics(context, ticker_id=ticker_id, logger=logger)
 
 
 def record_indicators(
@@ -135,30 +65,9 @@ def record_indicators(
     snapshot: Dict[str, Any],
     logger: ILogger | None = None,
 ) -> None:
-    """Сохранить снимок индикаторов в контекст и его историю.
+    """Фасад для :func:`indicator_recorder.record_indicators`."""
 
-    * ``context["indicators"][symbol]`` – последний снимок;
-    * ``context["indicators_history"][symbol]`` – окно последних N
-      снимков, где ``N == CurrencyPair.indicator_window_size``.
-
-    История живёт в простом dict/list, чтобы в будущем можно было
-    прозрачно заменить backend (например, на Redis), оставив контракт
-    этой функции прежним.
-    """
-
-    indicators = context.setdefault("indicators", {})
-    indicators[symbol] = snapshot
-
-    history_all = context.setdefault("indicators_history", {})
-    history_for_symbol: List[Dict[str, Any]] = history_all.setdefault(symbol, [])
-
-    window = _get_window_size_for_symbol(context, symbol)
-    truncated = _append_with_window(history_for_symbol, snapshot, maxlen=window)
-
-    if logger:
-        logger.log_info(
-            f"📊 [IND] Снимок индикаторов записан в историю | symbol: {symbol} | history_len: {len(history_for_symbol)} | window: {window} | truncated: {truncated}"
-        )
+    _record_indicators(context, symbol=symbol, snapshot=snapshot, logger=logger)
 
 
 def record_intents(
@@ -168,32 +77,9 @@ def record_intents(
     intents: List[Dict[str, Any]],
     logger: ILogger | None = None,
 ) -> None:
-    """Сохранить intents стратегий в последний срез и историю.
+    """Фасад для :func:`decision_recorder.record_intents`."""
 
-    Формат intents не фиксируется жёстко: это список произвольных dict,
-    но на уровне оркестратора ожидаются как минимум поля ``action``,
-    ``reason`` и ``params``. В контексте держим:
-
-    * ``context["intents"][symbol]`` – последний список intents;
-    * ``context["intents_history"][symbol]`` – окно последних наборов
-      intents по тикам, размер окна берётся из настроек пары.
-    """
-
-    current = context.setdefault("intents", {})
-    current[symbol] = intents
-
-    history_all = context.setdefault("intents_history", {})
-    history_for_symbol: List[List[Dict[str, Any]]] = history_all.setdefault(
-        symbol, []
-    )
-
-    window = _get_window_size_for_symbol(context, symbol)
-    truncated = _append_with_window(history_for_symbol, intents, maxlen=window)
-
-    if logger:
-        logger.log_info(
-            f"📂 [STATE] Intents сохранены в истории | symbol: {symbol} | intents_count: {len(intents)} | history_len: {len(history_for_symbol)} | window: {window} | truncated: {truncated}"
-        )
+    _record_intents(context, symbol=symbol, intents=intents, logger=logger)
 
 
 def record_decision(
@@ -203,27 +89,9 @@ def record_decision(
     decision: Dict[str, Any],
     logger: ILogger | None = None,
 ) -> None:
-    """Сохранить финальное решение оркестратора в срез и историю.
+    """Фасад для :func:`decision_recorder.record_decision`."""
 
-    * ``context["decisions"][symbol]`` – последнее решение;
-    * ``context["decisions_history"][symbol]`` – окно последних N
-      решений, N определяется настройками пары.
-    """
-
-    current = context.setdefault("decisions", {})
-    current[symbol] = decision
-
-    history_all = context.setdefault("decisions_history", {})
-    history_for_symbol: List[Dict[str, Any]] = history_all.setdefault(symbol, [])
-
-    window = _get_window_size_for_symbol(context, symbol)
-    truncated = _append_with_window(history_for_symbol, decision, maxlen=window)
-
-    if logger:
-        action = decision.get("action")
-        logger.log_info(
-            f"📂 [STATE] Решение оркестратора сохранено в истории | symbol: {symbol} | action: {action} | history_len: {len(history_for_symbol)} | window: {window} | truncated: {truncated}"
-        )
+    _record_decision(context, symbol=symbol, decision=decision, logger=logger)
 
 
 def make_state_snapshot(
@@ -316,4 +184,14 @@ def apply_state_snapshot(
         logger.log_info(
             f"📦 [LOAD] Снапшот state применён к контексту | symbol: {symbol} | ticker_id: {snapshot.get('ticker_id')}"
         )
+__all__ = [
+    "init_context",
+    "update_market_state",
+    "update_metrics",
+    "record_indicators",
+    "record_intents",
+    "record_decision",
+    "make_state_snapshot",
+    "apply_state_snapshot",
+]
 
