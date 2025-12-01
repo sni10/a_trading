@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from src.infrastructure.logging.logging_setup import log_stage
+from src.infrastructure.logging import log_stage
 
 
 def parse_int(value: str | None, default: int) -> int:

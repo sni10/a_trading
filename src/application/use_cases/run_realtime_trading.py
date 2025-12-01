@@ -18,7 +18,7 @@ from src.domain.services.ticker.ticker_source import TickSource
 from src.infrastructure.connectors.ccxt_pro_exchange_connector import (
     CcxtProExchangeConnector,
 )
-from src.infrastructure.logging.logging_setup import (
+from src.infrastructure.logging import (
     log_info,
     log_separator,
     log_stage,

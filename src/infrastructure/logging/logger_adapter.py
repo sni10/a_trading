@@ -1,6 +1,6 @@
-"""Адаптер логгера, реализующий протокол ILogger.
+"""Адаптер логгера, реализующий протокол :class:`ILogger`.
 
-Делегирует вызовы к существующим функциям из logging_setup.py,
+Делегирует вызовы к функциям из :mod:`src.infrastructure.logging.log_functions`,
 обеспечивая совместимость доменного слоя с инфраструктурой логирования.
 """
 
@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 
 from src.domain.interfaces.logger import ILogger
-from src.infrastructure.logging.logging_setup import (
+from src.infrastructure.logging.log_functions import (
     log_error,
     log_info,
     log_stage as infra_log_stage,
@@ -18,7 +18,7 @@ from src.infrastructure.logging.logging_setup import (
 
 
 class LoggerAdapter:
-    """Адаптер, реализующий протокол ILogger через функции logging_setup.
+    """Адаптер, реализующий протокол ILogger через функции log_functions.
     
     Позволяет доменному коду использовать абстракцию ILogger,
     при этом делегируя реальное логирование инфраструктурному слою.
@@ -47,7 +47,7 @@ class LoggerAdapter:
     def log_stage(self, stage: str, msg: str, *, level: int = logging.INFO) -> None:
         """Залогировать сообщение для указанного этапа конвейера.
         
-        Делегирует вызов к infra_log_stage из logging_setup.
+        Делегирует вызов к :func:`infra_log_stage` из ``log_functions``.
         Параметр level в текущей реализации logging_setup не используется
         напрямую (всегда INFO), но сохраняется для совместимости с протоколом.
         

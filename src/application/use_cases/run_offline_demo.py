@@ -18,7 +18,7 @@ from src.config.config import AppConfig, load_config
 from src.domain.interfaces.currency_pair_repository import ICurrencyPairRepository
 from src.domain.services.context.state import init_context
 from src.domain.services.market_data.ticker_source import generate_ticks
-from src.infrastructure.logging.logging_setup import (
+from src.infrastructure.logging import (
     log_info,
     log_separator,
     log_warning,

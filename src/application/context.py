@@ -21,7 +21,7 @@ from src.infrastructure.cache.in_memory import (
     InMemoryIndicatorStore,
     InMemoryMarketCache,
 )
-from src.infrastructure.logging.logging_setup import log_stage
+from src.infrastructure.logging import log_stage
 from src.infrastructure.repositories import InMemoryCurrencyPairRepository
 
 

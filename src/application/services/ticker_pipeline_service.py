@@ -13,7 +13,7 @@ from src.domain.services.indicators.indicator_engine import compute_indicators
 from src.domain.services.strategies.strategy_hub import evaluate_strategies
 from src.domain.services.orchestrator.orchestrator import decide
 from src.domain.services.execution.execution_service import execute
-from src.infrastructure.logging.logging_setup import log_info
+from src.infrastructure.logging import log_info
 
 # Имя логгера для этого модуля
 _LOG = __name__

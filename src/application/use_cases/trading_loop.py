@@ -12,7 +12,7 @@ from src.application.services.state_snapshot_service import StateSnapshotService
 from src.application.services.ticker_pipeline_service import TickPipelineService
 from src.config.config import AppConfig
 from src.domain.services.ticker.ticker_source import TickSource
-from src.infrastructure.logging.logging_setup import log_info, log_separator
+from src.infrastructure.logging import log_info, log_separator
 
 # Интервал логирования статистики (каждые N тиков)
 TICKER_LOG_INTERVAL = 10

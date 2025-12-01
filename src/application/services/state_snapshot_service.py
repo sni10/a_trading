@@ -12,7 +12,7 @@ from typing import Any, Dict
 from src.config.config import AppConfig
 from src.domain.services.context.state import apply_state_snapshot, make_state_snapshot
 from src.domain.interfaces.state_snapshot_store import IStateSnapshotStore
-from src.infrastructure.logging.logging_setup import log_stage
+from src.infrastructure.logging import log_stage
 
 
 class StateSnapshotService:

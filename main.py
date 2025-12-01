@@ -51,7 +51,7 @@ def _run_cli(argv: list[str]) -> None:
     выполнения.
     """
 
-    from src.infrastructure.logging.logging_setup import log_stage
+    from src.infrastructure.logging import log_stage
 
     try:
         cli_symbol = _parse_cli_pair(argv)
