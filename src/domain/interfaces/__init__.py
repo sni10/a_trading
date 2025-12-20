@@ -15,6 +15,8 @@ from .exchange_pair_metadata_provider import (
 )
 from .logger import ILogger
 from .order_repository import IOrderRepository
+from .order_sync_service import IOrderSyncService
+from .persistence_service import IPersistenceService
 from .state_snapshot_store import IStateSnapshotStore
 from .trade_repository import ITradeRepository
 
@@ -30,4 +32,6 @@ __all__ = [
     "IExchangePairMetadataProvider",
     "PairPrecisions",
     "IStateSnapshotStore",
+    "IPersistenceService",
+    "IOrderSyncService",
 ]
