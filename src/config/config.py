@@ -9,9 +9,9 @@ DEPRECATED: Используйте ``from src.config import AppConfig, load_conf
 """
 
 from .config_loader import load_config
-from .config_schema import AppConfig
+from .config_schema import AppConfig, CacheConfig
 
 # Флаг, предотвращающий множественную загрузку .env (используется в тестах).
 _ENV_LOADED: bool = False
 
-__all__ = ["AppConfig", "load_config"]
+__all__ = ["AppConfig", "CacheConfig", "load_config"]

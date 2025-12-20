@@ -179,14 +179,19 @@ def test_order_book_refresh_worker_updates_cache_once() -> None:
 def test_compute_indicators_uses_price_history_and_triggers() -> None:
     from src.infrastructure.cache.in_memory import InMemoryIndicatorStore
     from src.domain.entities.currency_pair import CurrencyPair
+    from src.config.config import CacheConfig
 
     symbol = "BTC/USDT"
-    pair = CurrencyPair(symbol, "BTC", "USDT", indicator_window_size=500)
+    pair = CurrencyPair(symbol, "BTC", "USDT")
+
+    # indicator_window_size теперь в AppConfig.cache
+    cache_cfg = CacheConfig(indicator_window_size=500)
     cfg = AppConfig(
         indicator_fast_interval=1,
         indicator_medium_interval=2,
         indicator_heavy_interval=10,
     )
+    cfg.cache = cache_cfg
     store = InMemoryIndicatorStore(pair, cfg)
 
     context: Dict[str, Any] = {

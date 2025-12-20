@@ -39,7 +39,7 @@ def test_file_state_snapshot_store_save_and_load(tmp_path) -> None:
 
 def test_make_and_apply_state_snapshot_roundtrip(tmp_path) -> None:
     symbol = "ETH/USDT"
-    cfg = AppConfig(symbol=symbol)
+    cfg = AppConfig()  # symbol больше НЕ в AppConfig
     context = init_context(cfg)
 
     # Инициализируем часть state

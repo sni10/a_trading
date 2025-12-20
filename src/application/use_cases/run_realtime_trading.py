@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 import asyncio
-import time
 
 from src.application.context import build_context
 from src.application.services.state_snapshot_service import StateSnapshotService
 from src.application.services.ticker_pipeline_service import TickPipelineService
+from src.application.repository_factory import build_repositories
 from src.application.use_cases.run_offline_demo import run_demo_offline
 from src.application.use_cases.trading_loop import run_realtime_core
 from src.application.use_cases.worker_manager import run_order_book_refresh_worker
 from src.config.config import AppConfig, load_config
-from src.domain.interfaces.currency_pair_repository import ICurrencyPairRepository
+from src.domain.entities.currency_pair import CurrencyPair
 from src.domain.services.context.state import init_context
 from src.domain.services.ticker.ticker_source import TickSource
 from src.infrastructure.connectors.ccxt_pro_exchange_connector import (
@@ -26,7 +26,6 @@ from src.infrastructure.logging import (
     log_warning,
     setup_logging,
 )
-from src.infrastructure.repositories import InMemoryCurrencyPairRepository
 from src.infrastructure.state.file_state_snapshot_store import FileStateSnapshotStore
 
 # Версия прототипа
@@ -49,19 +48,31 @@ async def run_realtime_from_exchange(symbol: str | None = None) -> None:
 
     setup_logging()
 
-    cfg = load_config(symbol=symbol)
-    active_symbol = cfg.symbol
+    if not symbol:
+        raise RuntimeError("Symbol is required (expected like 'BTC/USDT')")
+
+    active_symbol = symbol
+    cfg = load_config()
 
     # === СТАРТОВЫЙ БЛОК (как в bad_example) ===
     log_info(f"🚀 ЗАПУСК AlgoTrade Prototype v{__version__} для {active_symbol}", _LOG)
 
-    # Репозиторий пар и валидация активной пары
-    pair_repo = InMemoryCurrencyPairRepository.from_symbols([active_symbol])
-    log_info(f"✅ InMemoryCurrencyPairRepository создан для {active_symbol}", _LOG)
-    
+    # Репозитории (DB через SQLAlchemy)
+    repos = build_repositories(cfg)
+    pair_repo = repos.pair_repository
+
+    # Bootstrap: если пары нет в БД — создаём с дефолтами.
     pair = pair_repo.get_by_symbol(active_symbol)
     if pair is None:
-        raise RuntimeError(f"Currency pair {active_symbol!r} is not configured")
+        base, quote = active_symbol.split("/", 1)
+        pair = pair_repo.upsert(
+            CurrencyPair(
+                symbol=active_symbol,
+                base_currency=base,
+                quote_currency=quote,
+            )
+        )
+        log_info(f"✅ Валютная пара {active_symbol} добавлена в БД (bootstrap)", _LOG)
     if not pair.enabled:
         raise RuntimeError(f"Currency pair {active_symbol!r} is disabled for trading")
 
@@ -75,7 +86,7 @@ async def run_realtime_from_exchange(symbol: str | None = None) -> None:
     log_info("✅ Контекст обогащён кэшами и CurrencyPair (build_context)", _LOG)
 
     snapshot_store = FileStateSnapshotStore()
-    snapshot_svc = StateSnapshotService(snapshot_store, cfg)
+    snapshot_svc = StateSnapshotService(snapshot_store, cfg, symbol=active_symbol)
     loaded_ticker_id = snapshot_svc.load(context)
 
     # Важно: реактивные данные (тикеры, стакан, история цен) при запуске

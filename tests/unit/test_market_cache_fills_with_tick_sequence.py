@@ -12,11 +12,11 @@ from src.domain.services.market_data.orderflow_simulator import (
 
 
 def _build_context_with_cache(symbol: str = "BTC/USDT") -> Dict[str, Any]:
-    cfg = AppConfig(symbol=symbol)
+    cfg = AppConfig()  # symbol больше не в AppConfig
     ctx = init_context(cfg)
 
     pair = CurrencyPair(symbol, symbol.split("/")[0], symbol.split("/")[1])
-    cache = InMemoryMarketCache(pair)
+    cache = InMemoryMarketCache(pair, cfg)  # Передаем config
 
     ctx["pairs"] = {symbol: pair}
     ctx["market_caches"] = {symbol: cache}
@@ -29,8 +29,8 @@ def test_ticker_sequence_fills_trades_history_until_window_limit_via_orderflow_s
 
     cache: InMemoryMarketCache = ctx["market_caches"][symbol]
 
-    # sanity: окно trades ограничено параметром пары
-    window_size = cache.pair.trades_history_size
+    # sanity: окно trades ограничено параметром из config.cache
+    window_size = cache.config.cache.trades_history_size
 
     # прокручиваем окно + несколько тиков поверх
     total_ticks = window_size + 5

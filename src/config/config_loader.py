@@ -16,7 +16,6 @@ from src.config.env_file_loader import load_local_env_file, read_key_file
 def load_config(
     *,
     # Параметры могут уточнять конфиг, но не перекрывают env.
-    symbol: str | None = None,
     max_ticks: int | None = None,
     ticker_sleep_sec: float | None = None,
 ) -> AppConfig:
@@ -30,9 +29,8 @@ def load_config(
     * явные аргументы функции могут задать значение **только если для
       поля нет значения в env**.
 
-    Исключение: торговый ``symbol`` намеренно не управляется через env
-    (переменная ``SYMBOLS`` игнорируется), поэтому для него порядок
-    такой: аргумент функции → значение по умолчанию.
+    ВАЖНО: Символы валютных пар (symbol) больше НЕ в AppConfig.
+    Они загружаются из CurrencyPair через репозиторий.
     """
 
     # Перед чтением os.getenv подгружаем локальный .env (если есть)
@@ -40,19 +38,23 @@ def load_config(
 
     base = AppConfig()
 
+    # --- database settings ---
+    env_db_type = os.getenv("DATABASE_TYPE")
+    if env_db_type:
+        base.database.database_type = env_db_type.strip().lower()  # type: ignore[assignment]
+
+    env_db_path = os.getenv("DATABASE_PATH")
+    if env_db_path:
+        base.database.database_path = env_db_path.strip()
+
+    env_db_url = os.getenv("DATABASE_URL")
+    if env_db_url:
+        base.database.database_url = env_db_url.strip()
+
     # environment
     env_environment = os.getenv("APP_ENV")
     if env_environment:
         base.environment = env_environment
-
-    # symbol
-    # На этом этапе **одна** торговая пара берётся либо из значений по
-    # умолчанию :class:`AppConfig`, либо из явного аргумента функции.
-    # Переменная окружения "SYMBOLS" намеренно игнорируется, чтобы
-    # точкой агрегации оставалась CurrencyPair через репозиторий, а не
-    # сырые строки из env.
-    if symbol is not None:
-        base.symbol = symbol
 
     # max_ticks
     env_max_ticks = os.getenv("MAX_TICKS")

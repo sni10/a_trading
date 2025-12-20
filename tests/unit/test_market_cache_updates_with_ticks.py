@@ -9,11 +9,11 @@ from src.infrastructure.cache.in_memory import InMemoryMarketCache
 
 
 def _build_context_with_cache(symbol: str = "BTC/USDT") -> Dict[str, Any]:
-    cfg = AppConfig(symbol=symbol)
+    cfg = AppConfig()  # symbol больше не в AppConfig
     ctx = init_context(cfg)
 
     pair = CurrencyPair(symbol, symbol.split("/")[0], symbol.split("/")[1])
-    cache = InMemoryMarketCache(pair)
+    cache = InMemoryMarketCache(pair, cfg)  # Передаем config
 
     ctx["pairs"] = {symbol: pair}
     ctx["market_caches"] = {symbol: cache}

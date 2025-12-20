@@ -23,10 +23,11 @@ class StateSnapshotService:
     оперирует только ``dict``‑контекстом.
     """
 
-    def __init__(self, store: IStateSnapshotStore, cfg: AppConfig) -> None:
+    def __init__(self, store: IStateSnapshotStore, cfg: AppConfig, *, symbol: str) -> None:
         self._store = store
         self._cfg = cfg
-        self._key = f"{cfg.environment}:{cfg.symbol}"
+        self._symbol = symbol
+        self._key = f"{cfg.environment}:{symbol}"
 
     def load(self, context: Dict[str, Any]) -> int:
         """Загрузить снапшот и применить его к ``context``.
@@ -41,17 +42,17 @@ class StateSnapshotService:
             log_stage(
                 "LOAD",
                 "📦 Снапшот state не найден, стартуем с пустого in-memory state",
-                symbol=self._cfg.symbol,
+                symbol=self._symbol,
             )
             return 0
 
-        apply_state_snapshot(context, symbol=self._cfg.symbol, snapshot=snapshot)
+        apply_state_snapshot(context, symbol=self._symbol, snapshot=snapshot)
 
         loaded_ticker_id = int(snapshot.get("ticker_id") or 0)
         log_stage(
             "LOAD",
             "📦 Снапшот state найден и загружен",
-            symbol=self._cfg.symbol,
+            symbol=self._symbol,
             ticker_id=loaded_ticker_id,
         )
         return loaded_ticker_id
@@ -73,7 +74,7 @@ class StateSnapshotService:
 
         snapshot = make_state_snapshot(
             context,
-            symbol=self._cfg.symbol,
+            symbol=self._symbol,
             ticker_id=ticker_id,
         )
         self._store.save_snapshot(self._key, snapshot)

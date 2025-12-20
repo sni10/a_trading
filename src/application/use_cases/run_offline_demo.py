@@ -12,9 +12,11 @@ from __future__ import annotations
 import time
 
 from src.application.context import build_context
+from src.application.repository_factory import build_repositories
 from src.application.services.state_snapshot_service import StateSnapshotService
 from src.application.services.ticker_pipeline_service import TickPipelineService
 from src.config.config import AppConfig, load_config
+from src.domain.entities.currency_pair import CurrencyPair
 from src.domain.interfaces.currency_pair_repository import ICurrencyPairRepository
 from src.domain.services.context.state import init_context
 from src.domain.services.market_data.ticker_source import generate_ticks
@@ -24,7 +26,6 @@ from src.infrastructure.logging import (
     log_warning,
     setup_logging,
 )
-from src.infrastructure.repositories import InMemoryCurrencyPairRepository
 from src.infrastructure.state.file_state_snapshot_store import FileStateSnapshotStore
 
 # Версия прототипа
@@ -64,21 +65,35 @@ def run_demo_offline(
     setup_logging()
 
     # Инициализируем AppConfig из env + параметров run()
-    cfg = load_config(symbol=symbol)
+    cfg = load_config()
+
+    if not symbol:
+        raise RuntimeError("Symbol is required for offline demo (expected like 'BTC/USDT')")
 
     # Один процесс прототипа обслуживает ровно одну валютную пару.
-    active_symbol = cfg.symbol
+    active_symbol = symbol
 
     # === СТАРТОВЫЙ БЛОК ===
     log_info(f"🚀 ЗАПУСК AlgoTrade Prototype v{__version__} (OFFLINE DEMO) для {active_symbol}", _LOG)
 
     # Репозиторий пар: либо передан снаружи (в будущем — обёртка над БД),
-    # либо создаём in-memory репозиторий из одного символа конфига.
+    # либо используем SQLAlchemy-репозиторий из RepositoryFactory.
     if pair_repository is None:
-        pair_repository = InMemoryCurrencyPairRepository.from_symbols([cfg.symbol])
-    log_info(f"✅ InMemoryCurrencyPairRepository создан для {cfg.symbol}", _LOG)
+        repos = build_repositories(cfg)
+        pair_repository = repos.pair_repository
 
+    # Bootstrap: если пары нет в БД — создаём с дефолтами.
     pair = pair_repository.get_by_symbol(active_symbol)
+    if pair is None:
+        base, quote = active_symbol.split("/", 1)
+        pair = pair_repository.upsert(
+            CurrencyPair(
+                symbol=active_symbol,
+                base_currency=base,
+                quote_currency=quote,
+            )
+        )
+        log_info(f"✅ Валютная пара {active_symbol} добавлена (bootstrap)", _LOG)
     if pair is None:
         raise RuntimeError(f"Currency pair {active_symbol!r} is not configured")
     if not pair.enabled:
@@ -97,7 +112,7 @@ def run_demo_offline(
 
     # --- Загрузка state из снапшота (если есть) ---
     snapshot_store = FileStateSnapshotStore()
-    snapshot_svc = StateSnapshotService(snapshot_store, cfg)
+    snapshot_svc = StateSnapshotService(snapshot_store, cfg, symbol=active_symbol)
     loaded_ticker_id = snapshot_svc.load(context)
 
     if loaded_ticker_id > 0:
@@ -144,7 +159,7 @@ def run_demo_offline(
 
     try:
         for ticker in generate_ticks(
-            cfg.symbol, max_ticks=cfg.max_ticks, sleep_sec=cfg.ticker_sleep_sec
+            active_symbol, max_ticks=cfg.max_ticks, sleep_sec=cfg.ticker_sleep_sec
         ):
             ticker_start = time.time()
             ticker_id += 1

@@ -19,31 +19,33 @@ from src.infrastructure.logging.logging_setup import log_stage
 class InMemoryMarketCache(IMarketCache):
     """Кэш рыночных данных для одной пары.
 
-    Использует размеры окон из CurrencyPair:
+    Использует размеры окон из AppConfig.cache:
 
     * bar_window_size – длина истории баров;
     * trades_history_size – длина истории трейдов;
     * orderbook_depth – максимальное число уровней стакана на сторону.
     """
 
-    def __init__(self, pair: CurrencyPair):
+    def __init__(self, pair: CurrencyPair, config: AppConfig):
         self.pair = pair
+        self.config = config
         self.symbol: str = pair.symbol
+
+        # Параметры кэша берем из ГЛОБАЛЬНОГО конфига
+        cache = config.cache
 
         self._ticker: Dict[str, Any] | None = None
         self._orderbook: Dict[str, Any] | None = None
-        self._bars: Deque[Dict[str, Any]] = deque(maxlen=pair.bar_window_size)
-        self._trades: Deque[Dict[str, Any]] = deque(
-            maxlen=pair.trades_history_size
-        )
+        self._bars: Deque[Dict[str, Any]] = deque(maxlen=cache.bar_window_size)
+        self._trades: Deque[Dict[str, Any]] = deque(maxlen=cache.trades_history_size)
 
         log_stage(
             "BOOT",
             "Инициализация InMemoryMarketCache",
             symbol=self.symbol,
-            bar_window_size=pair.bar_window_size,
-            trades_history_size=pair.trades_history_size,
-            orderbook_depth=pair.orderbook_depth,
+            bar_window_size=cache.bar_window_size,
+            trades_history_size=cache.trades_history_size,
+            orderbook_depth=cache.orderbook_depth,
         )
 
     # --- Ticker ---
@@ -66,9 +68,9 @@ class InMemoryMarketCache(IMarketCache):
     # --- Order book ---
 
     def update_orderbook(self, orderbook: Dict[str, Any]) -> None:  # type: ignore[override]
-        """Сохранить стакан, обрезав списки bids/asks по depth пары."""
+        """Сохранить стакан, обрезав списки bids/asks по depth из конфига."""
 
-        depth = self.pair.orderbook_depth
+        depth = self.config.cache.orderbook_depth
         bids = orderbook.get("bids") or []
         asks = orderbook.get("asks") or []
         trimmed = {
@@ -101,7 +103,7 @@ class InMemoryMarketCache(IMarketCache):
             symbol=self.symbol,
             price=trade.get("price"),
             trades_len=len(self._trades),
-            window=self.pair.trades_history_size,
+            window=self.config.cache.trades_history_size,
         )
 
     def get_trades(self, limit: int | None = None) -> List[Dict[str, Any]]:  # type: ignore[override]
@@ -120,7 +122,7 @@ class InMemoryMarketCache(IMarketCache):
             symbol=self.symbol,
             close=bar.get("close"),
             bars_len=len(self._bars),
-            window=self.pair.bar_window_size,
+            window=self.config.cache.bar_window_size,
         )
 
     def get_bars(self, limit: int | None = None) -> List[Dict[str, Any]]:  # type: ignore[override]
@@ -147,7 +149,8 @@ class InMemoryIndicatorStore(IIndicatorStore):
         self.heavy_interval: int = config.indicator_heavy_interval
 
         # Храним последние значения индикаторов в отдельных окнах.
-        maxlen = pair.indicator_window_size
+        # Размер окна берем из глобального конфига
+        maxlen = config.cache.indicator_window_size
         self.fast_history: Deque[float] = deque(maxlen=maxlen)
         self.medium_history: Deque[float] = deque(maxlen=maxlen)
         self.heavy_history: Deque[float] = deque(maxlen=maxlen)

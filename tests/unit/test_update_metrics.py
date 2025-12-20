@@ -7,7 +7,7 @@ from src.domain.services.context.state import init_context, update_metrics
 
 
 def _build_context() -> Dict[str, Any]:
-    cfg = AppConfig(symbol="BTC/USDT")
+    cfg = AppConfig()  # symbol больше НЕ в AppConfig
     return init_context(cfg)
 
 

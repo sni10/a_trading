@@ -12,6 +12,6 @@
 """
 
 from .config_loader import load_config
-from .config_schema import AppConfig
+from .config_schema import AppConfig, CacheConfig
 
-__all__ = ["AppConfig", "load_config"]
+__all__ = ["AppConfig", "CacheConfig", "load_config"]
