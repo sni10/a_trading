@@ -130,17 +130,43 @@ class StateSnapshotService:
             for order in orders:
                 if order.status in ["open", "closed"]:
                     self._order_repo.upsert(order)
+                    # После upsert загружаем сохраненный order с id из БД
+                    if order.exchange_order_id:
+                        saved_order = next(
+                            (o for o in self._order_repo.list_by_symbol(self._symbol, limit=100)
+                             if o.exchange_order_id == order.exchange_order_id),
+                            None
+                        )
+                        if saved_order and saved_order.id:
+                            order.id = saved_order.id
             log_stage(
                 "DB_SAVE",
                 f"💾 Сохранено ордеров: {len([o for o in orders if o.status in ['open', 'closed']])}",
                 symbol=self._symbol,
             )
 
-        # Trades
+        # Trades - проставить order_id перед сохранением
         if self._trade_repo:
             trades = (context.get("trades") or {}).get(self._symbol, [])
+            orders = (context.get("orders") or {}).get(self._symbol, [])
+
+            # Создать мапу exchange_order_id -> order.id
+            order_map = {o.exchange_order_id: o.id for o in orders if o.exchange_order_id and o.id}
+
             for trade in trades:
+                # Если order_id не установлен, попробовать найти через связь с order
+                if not trade.order_id:
+                    # Найти соответствующий order для этого трейда (по symbol, side, timestamp)
+                    matching_order = next(
+                        (o for o in orders
+                         if o.symbol == trade.symbol and o.side == trade.side),
+                        None
+                    )
+                    if matching_order and matching_order.id:
+                        trade.order_id = matching_order.id
+
                 self._trade_repo.upsert(trade)
+
             log_stage(
                 "DB_SAVE",
                 f"💾 Сохранено трейдов: {len(trades)}",
@@ -177,24 +203,11 @@ class StateSnapshotService:
                 symbol=self._symbol,
             )
 
-        # Загрузить ордера по сделкам + дополнительные открытые ордера
+        # Загрузить все ордера по паре (открытые и закрытые)
         orders = []
         if self._order_repo:
-            # Ордера из сделок
-            for deal in deals:
-                if deal.buy_order:
-                    orders.append(deal.buy_order)
-                if deal.sell_order:
-                    orders.append(deal.sell_order)
-
-            # Дополнительно загрузить открытые ордера по паре
-            all_orders = self._order_repo.list_by_symbol(self._symbol, limit=100)
-            open_orders = [o for o in all_orders if o.status == "open"]
-            orders.extend(open_orders)
-
-            # Убрать дубликаты
-            orders_map = {o.id: o for o in orders}
-            orders = list(orders_map.values())
+            # Загрузить все ордера по символу
+            orders = self._order_repo.list_by_symbol(self._symbol, limit=100)
 
             orders_section = context.setdefault("orders", {})
             orders_section[self._symbol] = orders

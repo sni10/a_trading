@@ -25,6 +25,8 @@ def init_context(
         "indicators": {},  # последний снимок индикаторов по инструментам
         "positions": {},
         "orders": {},
+        "deals": {},
+        "trades": {},
         "risk": {},
         "metrics": {"ticks": 0},
         # История индикаторов по каждому инструменту
