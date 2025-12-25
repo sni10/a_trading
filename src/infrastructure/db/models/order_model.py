@@ -11,7 +11,8 @@ from src.infrastructure.db.base import Base
 class OrderModel(Base):
     __tablename__ = "orders"
 
-    id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    exchange_order_id: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True, index=True)
 
     symbol: Mapped[str] = mapped_column(String(32), index=True)
     timestamp: Mapped[int] = mapped_column(BigInteger, index=True)
@@ -27,8 +28,6 @@ class OrderModel(Base):
     filled: Mapped[float] = mapped_column(Float, default=0.0)
     remaining: Mapped[float] = mapped_column(Float, default=0.0)
     cost: Mapped[float] = mapped_column(Float, default=0.0)
-
-    client_order_id: Mapped[str | None] = mapped_column(String(128), nullable=True, index=True)
     last_trade_timestamp: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     time_in_force: Mapped[str | None] = mapped_column(String(16), nullable=True)
     post_only: Mapped[bool] = mapped_column(Boolean, default=False)

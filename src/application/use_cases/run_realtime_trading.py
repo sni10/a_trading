@@ -11,6 +11,7 @@ from src.application.repository_factory import build_repositories
 from src.application.use_cases.run_offline_demo import run_demo_offline
 from src.application.use_cases.trading_loop import run_realtime_core
 from src.application.use_cases.worker_manager import run_order_book_refresh_worker
+from src.application.workers.persistence_worker import PersistenceWorker
 from src.config.config import AppConfig, load_config
 from src.domain.entities.currency_pair import CurrencyPair
 from src.domain.services.context.state import init_context
@@ -85,9 +86,22 @@ async def run_realtime_from_exchange(symbol: str | None = None) -> None:
     context = build_context(cfg, context, pair_repository=pair_repo)
     log_info("✅ Контекст обогащён кэшами и CurrencyPair (build_context)", _LOG)
 
+    # Снапшоты: файл-стораж + БД-репозитории
     snapshot_store = FileStateSnapshotStore()
-    snapshot_svc = StateSnapshotService(snapshot_store, cfg, symbol=active_symbol)
+    snapshot_svc = StateSnapshotService(
+        snapshot_store,
+        cfg,
+        symbol=active_symbol,
+        deal_repo=repos.deal_repository,
+        order_repo=repos.order_repository,
+        trade_repo=repos.trade_repository,
+    )
+
+    # 1. Загрузить реактивные данные из файл-стораж (индикаторы, метрики и т.д.)
     loaded_ticker_id = snapshot_svc.load(context)
+
+    # 2. Загрузить персистентные данные из БД (сделки, ордера, трейды)
+    snapshot_svc.load_from_db(context)
 
     # Важно: реактивные данные (тикеры, стакан, история цен) при запуске
     # всегда прогреваются заново, поэтому логический счётчик tick(ticker)_id
@@ -95,11 +109,13 @@ async def run_realtime_from_exchange(symbol: str | None = None) -> None:
     # сохранён больший tick_id.
     if loaded_ticker_id > 0:
         log_info(
-            f"📦 Загружен снапшот состояния (tick_id={loaded_ticker_id}), но стартовый ticker_id новой сессии = 0",
+            f"📦 Загружен снапшот из файла (tick_id={loaded_ticker_id}), стартовый ticker_id новой сессии = 0",
             _LOG,
         )
     else:
-        log_info("📦 Снапшот не найден, старт с нуля", _LOG)
+        log_info("📦 Файловый снапшот не найден", _LOG)
+
+    log_info("📦 Персистентные данные (сделки, ордера, трейды) загружены из БД", _LOG)
 
     # Сетевой коннектор и источник тиков
     connector = CcxtProExchangeConnector(cfg)
@@ -113,6 +129,13 @@ async def run_realtime_from_exchange(symbol: str | None = None) -> None:
         run_order_book_refresh_worker(connector, context, cfg, symbol=active_symbol)
     )
     log_info("✅ Воркер стакана запущен", _LOG)
+
+    # Воркер периодического сброса в БД (каждые 3 минуты)
+    persistence_worker = PersistenceWorker(
+        snapshot_svc, context, symbol=active_symbol, interval_seconds=180
+    )
+    await persistence_worker.start()
+    log_info("✅ Воркер персистентности запущен (интервал: 180 сек)", _LOG)
 
     pipeline = TickPipelineService(cfg)
     log_info("✅ Конвейер обработки тиков создан (TickPipelineService)", _LOG)
@@ -142,11 +165,20 @@ async def run_realtime_from_exchange(symbol: str | None = None) -> None:
             start_ticker_id=0,
         )
     finally:
+        # Остановка воркеров и финальное сохранение
+        log_info("🛑 Остановка воркеров и сохранение состояния...", _LOG)
+
+        # Остановить воркер персистентности (внутри сделает финальный сброс в БД)
+        await persistence_worker.stop()
+        log_info("✅ Воркер персистентности остановлен, финальный сброс в БД выполнен", _LOG)
+
+        # Остановить воркер стакана
         orderbook_task.cancel()
         try:
             await orderbook_task
         except asyncio.CancelledError:
             pass
+        log_info("✅ Воркер стакана остановлен", _LOG)
 
         await connector.close()
         log_info("🛑 Коннектор закрыт, система остановлена", _LOG)

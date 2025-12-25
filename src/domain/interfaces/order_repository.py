@@ -18,7 +18,7 @@ class IOrderRepository(Protocol):
         """Создать или обновить ордер по его ID."""
 
     def get_by_id(self, order_id: str) -> Order | None:
-        """Получить ордер по ID (биржевой id)."""
+        """Получить ордер по ID."""
 
     def list_by_symbol(self, symbol: str, *, limit: int = 100) -> List[Order]:
         """Список ордеров по инструменту (последние N)."""

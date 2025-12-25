@@ -14,6 +14,7 @@ from src.domain.interfaces.deal_repository import IDealRepository
 from src.domain.interfaces.order_repository import IOrderRepository
 from src.domain.interfaces.trade_repository import ITradeRepository
 from src.infrastructure.db import SqlAlchemySessionFactory, build_engine, init_db
+from src.infrastructure.db.base import set_base_schema
 from src.infrastructure.repositories import (
     SqlAlchemyCurrencyPairRepository,
     SqlAlchemyDealRepository,
@@ -40,7 +41,13 @@ def build_repositories(cfg: AppConfig) -> RepositoryBundle:
     """Собрать репозитории согласно AppConfig.database.
 
     Сейчас обе опции (sqlite/postgresql) используют один стек SQLAlchemy.
+
+    Для PostgreSQL можно задать схему через DB_SCHEMA. Схема должна
+    существовать в БД (создаётся администратором или миграциями).
     """
+    # Установить схему ДО создания engine (для корректной работы metadata)
+    if cfg.database.database_type == "postgresql" and cfg.database.database_schema:
+        set_base_schema(cfg.database.database_schema)
 
     engine = build_engine(cfg)
     init_db(engine)

@@ -15,7 +15,8 @@ from src.infrastructure.db.session_factory import SqlAlchemySessionFactory
 def _entity_to_model(order: Order) -> OrderModel:
     data = order.to_dict()
     return OrderModel(
-        id=str(data["id"]),
+        id=int(data["id"]) if data.get("id") is not None else None,
+        exchange_order_id=str(data["exchange_order_id"]) if data.get("exchange_order_id") is not None else None,
         symbol=str(data["symbol"]),
         timestamp=int(data["timestamp"]),
         datetime=str(data["datetime"]),
@@ -28,9 +29,6 @@ def _entity_to_model(order: Order) -> OrderModel:
         filled=float(data.get("filled", 0.0)),
         remaining=float(data.get("remaining", 0.0)),
         cost=float(data.get("cost", 0.0)),
-        client_order_id=(
-            str(data["client_order_id"]) if data.get("client_order_id") is not None else None
-        ),
         last_trade_timestamp=(
             int(data["last_trade_timestamp"]) if data.get("last_trade_timestamp") is not None else None
         ),
@@ -51,6 +49,7 @@ def _model_to_entity(model: OrderModel) -> Order:
     return Order.from_dict(
         {
             "id": model.id,
+            "exchange_order_id": model.exchange_order_id,
             "symbol": model.symbol,
             "timestamp": model.timestamp,
             "datetime": model.datetime,
@@ -63,7 +62,6 @@ def _model_to_entity(model: OrderModel) -> Order:
             "filled": model.filled,
             "remaining": model.remaining,
             "cost": model.cost,
-            "client_order_id": model.client_order_id,
             "last_trade_timestamp": model.last_trade_timestamp,
             "time_in_force": model.time_in_force,
             "post_only": model.post_only,
@@ -90,7 +88,7 @@ class SqlAlchemyOrderRepository(IOrderRepository):
         with self._sf.session_scope() as session:
             session.merge(model)
 
-    def get_by_id(self, order_id: str) -> Order | None:
+    def get_by_id(self, order_id: int) -> Order | None:
         with self._sf.session_scope() as session:
             model = session.get(OrderModel, order_id)
             return _model_to_entity(model) if model is not None else None

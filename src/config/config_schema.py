@@ -98,6 +98,7 @@ class DatabaseConfig:
     database_type: Literal["sqlite", "postgresql"] = "sqlite"
     database_path: str = "data/deviant.db"
     database_url: str | None = None
+    database_schema: str | None = None  # PostgreSQL schema (default: public)
 
     def validate(self) -> None:
         """Fail-fast валидация DB-конфига."""

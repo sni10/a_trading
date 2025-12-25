@@ -2,52 +2,45 @@
 
 ВАЖНО:
 - Никаких raw SQL.
-- Выбор backend'а делается по AppConfig.database.
+- ТОЛЬКО PostgreSQL, SQLite удалён.
 """
 
 from __future__ import annotations
-
-from pathlib import Path
 
 from sqlalchemy import Engine, create_engine
 
 from src.config.config_schema import AppConfig
 
 
-def _sqlite_url(database_path: str) -> str:
-    # SQLAlchemy ожидает URL с forward-slashes.
-    if database_path.strip() == ":memory:":
-        return "sqlite+pysqlite:///:memory:"
-
-    path = Path(database_path)
-    if not path.is_absolute():
-        path = Path.cwd() / path
-    path.parent.mkdir(parents=True, exist_ok=True)
-    return f"sqlite+pysqlite:///{path.as_posix()}"
-
-
-def _postgresql_url(database_url: str) -> str:
-    # Нормализуем драйвер под psycopg (psycopg3).
-    if database_url.startswith("postgresql+psycopg://"):
-        return database_url
-    if database_url.startswith("postgresql://"):
-        return "postgresql+psycopg://" + database_url.removeprefix("postgresql://")
-    return database_url
-
-
 def build_database_url(cfg: AppConfig) -> str:
-    """Построить SQLAlchemy URL по AppConfig."""
+    """Построить SQLAlchemy URL по AppConfig.
 
+    ТОЛЬКО PostgreSQL. SQLite не поддерживается.
+    """
     db = cfg.database
-    if db.database_type == "sqlite":
-        return _sqlite_url(db.database_path)
-    return _postgresql_url(db.database_url or "")
+
+    if db.database_type != "postgresql":
+        raise ValueError(f"Unsupported database type: {db.database_type}. Only 'postgresql' is supported.")
+
+    if not db.database_url:
+        raise ValueError("DATABASE_URL is required for PostgreSQL")
+
+    # По умолчанию SQLAlchemy использует psycopg2 для postgresql://
+    return db.database_url
 
 
 def build_engine(cfg: AppConfig) -> Engine:
-    """Создать SQLAlchemy Engine по AppConfig."""
+    """Создать SQLAlchemy Engine по AppConfig.
 
+    Для PostgreSQL можно задать кастомную схему через DB_SCHEMA.
+    Для SQLite схема игнорируется.
+    """
     url = build_database_url(cfg)
+
+    # Для PostgreSQL можно задать search_path через connect_args
+    connect_args = {}
+    if cfg.database.database_type == "postgresql" and cfg.database.database_schema:
+        connect_args["options"] = f"-c search_path={cfg.database.database_schema},public"
 
     # pool_pre_ping полезен для postgres при долгом uptime.
     # Для sqlite лишнего вреда не делает.
@@ -56,6 +49,7 @@ def build_engine(cfg: AppConfig) -> Engine:
         echo=False,
         future=True,
         pool_pre_ping=True,
+        connect_args=connect_args,
     )
 
 

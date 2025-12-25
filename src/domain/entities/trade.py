@@ -25,19 +25,23 @@ class Trade:
     Один Order может содержать несколько Trade при частичном исполнении.
 
     Источник: https://docs.ccxt.com/#/?id=trade-structure
+
+    ВАЖНО: id - внутренний autoincrement, exchange_trade_id - от биржи
     """
-    # Обязательные поля
-    id: str                                    # ID трейда на бирже
-    order: str                                 # ID ордера, к которому относится трейд
-    timestamp: int                             # Unix timestamp в миллисекундах
-    datetime: str                              # ISO8601 datetime
-    symbol: str                                # Торговая пара 'BTC/USDT'
-    side: str                                  # 'buy' или 'sell'
-    price: float                               # Цена исполнения
-    amount: float                              # Объем в базовой валюте
+    # Внутренний ID (autoincrement в БД)
+    id: int | None = None                      # Внутренний PK (autoincrement)
+    exchange_trade_id: str | None = None       # ID трейда на бирже
+    order_id: int | None = None                # FK на Order.id (внутренний)
+
+    timestamp: int = 0                         # Unix timestamp в миллисекундах
+    datetime: str = ""                         # ISO8601 datetime
+    symbol: str = ""                           # Торговая пара 'BTC/USDT'
+    side: str = ""                             # 'buy' или 'sell'
+    price: float = 0.0                         # Цена исполнения
+    amount: float = 0.0                        # Объем в базовой валюте
 
     # Расчетные поля
-    cost: float                                # price * amount (общая стоимость)
+    cost: float = 0.0                          # price * amount (общая стоимость)
     taker_or_maker: str | None = None          # 'taker' или 'maker'
 
     # Дополнительные поля
@@ -78,12 +82,13 @@ class Trade:
         return self.cost + self.get_total_fee_cost()
 
     @classmethod
-    def from_ccxt(cls, ccxt_trade: dict[str, Any]) -> "Trade":
+    def from_ccxt(cls, ccxt_trade: dict[str, Any], order_id: int | None = None) -> "Trade":
         """
         Создает Trade из CCXT ответа биржи
 
         Args:
             ccxt_trade: Ответ от exchange.fetch_trades() или order['trades']
+            order_id: Внутренний ID ордера (если уже известен)
         """
         # Парсим основную комиссию
         fee = None
@@ -106,8 +111,9 @@ class Trade:
                 ))
 
         return cls(
-            id=str(ccxt_trade['id']),
-            order=str(ccxt_trade.get('order', '')),
+            id=None,  # Autoincrement в БД
+            exchange_trade_id=str(ccxt_trade['id']),  # ID от биржи
+            order_id=order_id,  # Внутренний FK
             timestamp=int(ccxt_trade['timestamp']),
             datetime=ccxt_trade['datetime'],
             symbol=ccxt_trade['symbol'],
@@ -155,8 +161,9 @@ class Trade:
         info_dict = info if isinstance(info, dict) else {}
 
         return cls(
-            id=str(data["id"]),
-            order=str(data.get("order", "")),
+            id=int(data["id"]) if data.get("id") is not None else None,
+            exchange_trade_id=str(data["exchange_trade_id"]) if data.get("exchange_trade_id") is not None else None,
+            order_id=int(data["order_id"]) if data.get("order_id") is not None else None,
             timestamp=int(data["timestamp"]),
             datetime=str(data["datetime"]),
             symbol=str(data["symbol"]),
@@ -177,7 +184,8 @@ class Trade:
         """Сериализация в словарь"""
         return {
             'id': self.id,
-            'order': self.order,
+            'exchange_trade_id': self.exchange_trade_id,
+            'order_id': self.order_id,
             'timestamp': self.timestamp,
             'datetime': self.datetime,
             'symbol': self.symbol,
@@ -205,7 +213,7 @@ class Trade:
     def __repr__(self) -> str:
         role = f" ({self.taker_or_maker})" if self.taker_or_maker else ""
         return (
-            f"Trade(id='{self.id}', order='{self.order}', "
+            f"Trade(id={self.id}, exchange_trade_id='{self.exchange_trade_id}', order_id={self.order_id}, "
             f"symbol='{self.symbol}', side='{self.side}'{role}, "
             f"price={self.price}, amount={self.amount}, cost={self.cost})"
         )

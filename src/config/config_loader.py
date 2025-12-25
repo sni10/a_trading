@@ -51,6 +51,10 @@ def load_config(
     if env_db_url:
         base.database.database_url = env_db_url.strip()
 
+    env_db_schema = os.getenv("DB_SCHEMA")
+    if env_db_schema:
+        base.database.database_schema = env_db_schema.strip()
+
     # environment
     env_environment = os.getenv("APP_ENV")
     if env_environment:

@@ -2,13 +2,17 @@
 -- Description: Создание таблицы валютных пар с торговыми настройками
 -- Created: 2024-12-18
 
+-- Создать схему main
+CREATE SCHEMA IF NOT EXISTS main;
+SET search_path TO main;
+
 -- ============================================================================
 -- CREATE TABLE
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS currency_pairs (
     -- Primary key
-    pair_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    pair_id SERIAL PRIMARY KEY,
 
     -- Идентификация пары
     symbol VARCHAR(32) NOT NULL UNIQUE,
@@ -16,17 +20,17 @@ CREATE TABLE IF NOT EXISTS currency_pairs (
     quote_currency VARCHAR(16) NOT NULL,
 
     -- Статус
-    enabled BOOLEAN NOT NULL DEFAULT 1,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
 
     -- Trading settings (специфичны для каждой пары)
-    deal_quota REAL NOT NULL DEFAULT 25.0,
-    profit_markup REAL NOT NULL DEFAULT 1.5,
+    deal_quota DOUBLE PRECISION NOT NULL DEFAULT 25.0,
+    profit_markup DOUBLE PRECISION NOT NULL DEFAULT 1.5,
     deal_count INTEGER NOT NULL DEFAULT 3,
     order_life_time INTEGER NOT NULL DEFAULT 1,
 
     -- Exchange technical params
-    min_step REAL NOT NULL DEFAULT 0.00001,
-    price_step REAL NOT NULL DEFAULT 0.01,
+    min_step DOUBLE PRECISION NOT NULL DEFAULT 0.00001,
+    price_step DOUBLE PRECISION NOT NULL DEFAULT 0.01,
 
     -- Timestamps (миллисекунды)
     created_at BIGINT NOT NULL,
@@ -58,7 +62,7 @@ INSERT INTO currency_pairs (
     -- BTC/USDT - основная пара для тестирования
     (
         'BTC/USDT', 'BTC', 'USDT',
-        0,
+        TRUE,
         100.0, 1.5, 5, 1,
         0.00001, 0.01,
         1734499200000, 1734499200000
@@ -67,7 +71,7 @@ INSERT INTO currency_pairs (
     -- ETH/USDT - вторая по популярности
     (
         'ETH/USDT', 'ETH', 'USDT',
-        1,
+        TRUE,
         50.0, 1.2, 3, 1,
         0.0001, 0.01,
         1734499200000, 1734499200000
@@ -76,7 +80,7 @@ INSERT INTO currency_pairs (
     -- BNB/USDT - для диверсификации
     (
         'BNB/USDT', 'BNB', 'USDT',
-        0,
+        TRUE,
         30.0, 1.0, 2, 1,
         0.0001, 0.01,
         1734499200000, 1734499200000
@@ -85,7 +89,7 @@ INSERT INTO currency_pairs (
     -- SOL/USDT - волатильная пара для агрессивной торговли
     (
         'SOL/USDT', 'SOL', 'USDT',
-        0,
+        TRUE,
         25.0, 2.0, 4, 1,
         0.001, 0.01,
         1734499200000, 1734499200000
@@ -94,7 +98,7 @@ INSERT INTO currency_pairs (
     -- XRP/USDT - низковолатильная пара
     (
         'XRP/USDT', 'XRP', 'USDT',
-        0,
+        TRUE,
         20.0, 0.8, 3, 2,
         0.01, 0.0001,
         1734499200000, 1734499200000
@@ -103,7 +107,7 @@ INSERT INTO currency_pairs (
     -- DOGE/USDT - отключенная пара (для тестирования фильтрации)
     (
         'DOGE/USDT', 'DOGE', 'USDT',
-        0,
+        FALSE,
         15.0, 1.0, 2, 1,
         1.0, 0.000001,
         1734499200000, 1734499200000
@@ -117,7 +121,7 @@ INSERT INTO currency_pairs (
 SELECT COUNT(*) as total_pairs FROM currency_pairs;
 
 -- Проверка: должно быть 5 активных пар
-SELECT COUNT(*) as active_pairs FROM currency_pairs WHERE enabled = 1;
+SELECT COUNT(*) as active_pairs FROM currency_pairs WHERE enabled = TRUE;
 
 -- Вывод всех тестовых пар
 SELECT

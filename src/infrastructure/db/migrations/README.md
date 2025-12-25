@@ -205,16 +205,18 @@ DROP TABLE IF EXISTS currency_pairs;
 - **JSON поля**: buy_order_json, sell_order_json, metadata_json
 
 ### orders
-- **PK**: id (string, биржевой ID)
+- **PK**: id (autoincrement INT)
+- **Unique**: exchange_order_id (биржевой ID для синхронизации)
 - **FK**: deal_id → deals.id
-- **Indexes**: symbol, timestamp, status, side, type, client_order_id, deal_id
+- **Indexes**: exchange_order_id, symbol, timestamp, status, side, type, deal_id
 - **Назначение**: Ордера на бирже (CCXT Order Structure)
 - **JSON поля**: fee_json, trades_json, info_json
 
 ### trades
-- **PK**: id (string, биржевой ID)
-- **FK**: order → orders.id (CASCADE)
-- **Indexes**: order, timestamp, symbol, side, (symbol, timestamp)
+- **PK**: id (autoincrement INT)
+- **Unique**: exchange_trade_id (биржевой ID для синхронизации)
+- **FK**: order_id → orders.id (CASCADE)
+- **Indexes**: exchange_trade_id, order_id, timestamp, symbol, side, (symbol, timestamp)
 - **Назначение**: Исполнения ордеров (CCXT Trade Structure)
 - **JSON поля**: fee_json, fees_json, info_json
 

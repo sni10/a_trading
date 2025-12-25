@@ -23,18 +23,23 @@ class Order:
     Ордер на бирже (CCXT Order Structure)
 
     Источник: https://docs.ccxt.com/#/?id=order-structure
+
+    ВАЖНО: id - внутренний autoincrement для FK, exchange_order_id - от биржи
     """
-    # Обязательные поля
-    id: str                                    # ID ордера на бирже
-    symbol: str                                # Торговая пара 'BTC/USDT'
-    timestamp: int                             # Unix timestamp в миллисекундах
-    datetime: str                              # ISO8601 datetime
-    status: str                                # 'open', 'closed', 'canceled', 'expired', 'rejected'
-    side: str                                  # 'buy' или 'sell'
-    type: str                                  # 'market', 'limit'
+    # Внутренний ID (autoincrement в БД)
+    id: int | None = None                      # Внутренний PK (autoincrement)
+
+    # Идентификация
+    exchange_order_id: str | None = None       # ID ордера на бирже (получаем после создания)
+    symbol: str = ""                           # Торговая пара 'BTC/USDT'
+    timestamp: int = 0                         # Unix timestamp в миллисекундах
+    datetime: str = ""                         # ISO8601 datetime
+    status: str = ""                           # 'open', 'closed', 'canceled', 'expired', 'rejected'
+    side: str = ""                             # 'buy' или 'sell'
+    type: str = ""                             # 'market', 'limit'
 
     # Объемы и цены
-    amount: float                              # Запрошенный объем в базовой валюте
+    amount: float = 0.0                        # Запрошенный объем в базовой валюте
     price: float | None = None                 # Цена (может быть None для market ордеров)
     average: float | None = None               # Средняя цена исполнения
     filled: float = 0.0                        # Исполненный объем
@@ -42,7 +47,6 @@ class Order:
     cost: float = 0.0                          # filled * price
 
     # Дополнительные поля
-    client_order_id: str | None = None         # Клиентский ID (для идемпотентности)
     last_trade_timestamp: int | None = None    # Timestamp последнего трейда
     time_in_force: str | None = None           # 'GTC', 'IOC', 'FOK', 'PO'
     post_only: bool = False                    # Только maker ордер
@@ -120,7 +124,8 @@ class Order:
             trade_ids = [str(t.get('id', '')) for t in ccxt_order['trades']]
 
         return cls(
-            id=str(ccxt_order['id']),
+            id=None,  # Autoincrement в БД
+            exchange_order_id=str(ccxt_order['id']),  # ID от биржи
             symbol=ccxt_order['symbol'],
             timestamp=int(ccxt_order['timestamp']),
             datetime=ccxt_order['datetime'],
@@ -133,7 +138,6 @@ class Order:
             filled=float(ccxt_order.get('filled', 0.0)),
             remaining=float(ccxt_order.get('remaining', 0.0)),
             cost=float(ccxt_order.get('cost', 0.0)),
-            client_order_id=ccxt_order.get('clientOrderId'),
             last_trade_timestamp=int(ccxt_order['lastTradeTimestamp']) if ccxt_order.get('lastTradeTimestamp') else None,
             time_in_force=ccxt_order.get('timeInForce'),
             post_only=bool(ccxt_order.get('postOnly', False)),
@@ -170,7 +174,8 @@ class Order:
         info_dict = info if isinstance(info, dict) else {}
 
         return cls(
-            id=str(data["id"]),
+            id=int(data["id"]) if data.get("id") is not None else None,
+            exchange_order_id=str(data["exchange_order_id"]) if data.get("exchange_order_id") is not None else None,
             symbol=str(data["symbol"]),
             timestamp=int(data["timestamp"]),
             datetime=str(data["datetime"]),
@@ -183,9 +188,6 @@ class Order:
             filled=float(data.get("filled", 0.0)),
             remaining=float(data.get("remaining", 0.0)),
             cost=float(data.get("cost", 0.0)),
-            client_order_id=(
-                str(data["client_order_id"]) if data.get("client_order_id") is not None else None
-            ),
             last_trade_timestamp=(
                 int(data["last_trade_timestamp"]) if data.get("last_trade_timestamp") is not None else None
             ),
@@ -207,6 +209,7 @@ class Order:
         """Сериализация в словарь"""
         return {
             'id': self.id,
+            'exchange_order_id': self.exchange_order_id,
             'symbol': self.symbol,
             'timestamp': self.timestamp,
             'datetime': self.datetime,
@@ -219,7 +222,6 @@ class Order:
             'filled': self.filled,
             'remaining': self.remaining,
             'cost': self.cost,
-            'client_order_id': self.client_order_id,
             'last_trade_timestamp': self.last_trade_timestamp,
             'time_in_force': self.time_in_force,
             'post_only': self.post_only,

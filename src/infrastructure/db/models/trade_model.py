@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import BigInteger, Float, JSON, String
+from sqlalchemy import BigInteger, Float, Integer, JSON, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.infrastructure.db.base import Base
@@ -11,8 +11,9 @@ from src.infrastructure.db.base import Base
 class TradeModel(Base):
     __tablename__ = "trades"
 
-    id: Mapped[str] = mapped_column(String(128), primary_key=True)
-    order: Mapped[str] = mapped_column(String(128), index=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    exchange_trade_id: Mapped[str | None] = mapped_column(String(128), nullable=True, unique=True, index=True)
+    order_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
 
     timestamp: Mapped[int] = mapped_column(BigInteger, index=True)
     datetime: Mapped[str] = mapped_column(String(64))

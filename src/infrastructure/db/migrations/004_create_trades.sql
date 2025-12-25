@@ -1,17 +1,23 @@
 -- Migration: 004_create_trades
 -- Description: Создание таблицы трейдов (исполнения ордеров) согласно CCXT Trade Structure
 -- Created: 2024-12-18
+-- Updated: 2024-12-25 - Refactored to use autoincrement INT id + exchange_trade_id + order_id FK
+
+SET search_path TO main;
 
 -- ============================================================================
 -- CREATE TABLE
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS trades (
-    -- Primary key (биржевой ID)
-    id VARCHAR(128) PRIMARY KEY,
+    -- Primary key (внутренний autoincrement)
+    id SERIAL PRIMARY KEY,
 
-    -- Связь с ордером
-    order VARCHAR(128) NOT NULL,
+    -- ID трейда на бирже (для синхронизации)
+    exchange_trade_id VARCHAR(128) UNIQUE,
+
+    -- Связь с ордером (внутренний FK)
+    order_id INTEGER,
 
     -- Временные метки
     timestamp BIGINT NOT NULL,
@@ -22,9 +28,9 @@ CREATE TABLE IF NOT EXISTS trades (
     side VARCHAR(8) NOT NULL,
 
     -- Исполнение
-    price REAL NOT NULL,
-    amount REAL NOT NULL,
-    cost REAL NOT NULL,
+    price DOUBLE PRECISION NOT NULL,
+    amount DOUBLE PRECISION NOT NULL,
+    cost DOUBLE PRECISION NOT NULL,
 
     -- Роль и тип
     taker_or_maker VARCHAR(16),
@@ -36,15 +42,18 @@ CREATE TABLE IF NOT EXISTS trades (
     info_json TEXT,
 
     -- Foreign key constraint
-    FOREIGN KEY ("order") REFERENCES orders(id) ON DELETE CASCADE
+    FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
 );
 
 -- ============================================================================
 -- CREATE INDEXES
 -- ============================================================================
 
-CREATE INDEX IF NOT EXISTS idx_trades_order
-    ON trades("order");
+CREATE INDEX IF NOT EXISTS idx_trades_exchange_trade_id
+    ON trades(exchange_trade_id);
+
+CREATE INDEX IF NOT EXISTS idx_trades_order_id
+    ON trades(order_id);
 
 CREATE INDEX IF NOT EXISTS idx_trades_timestamp
     ON trades(timestamp);
@@ -62,16 +71,16 @@ CREATE INDEX IF NOT EXISTS idx_trades_symbol_timestamp
 -- SEED DATA (тестовые данные)
 -- ============================================================================
 
--- Трейды для btc_buy_001 (deal #1)
+-- Трейды для order_id=1 (btc_buy_001, deal #1)
 INSERT INTO trades (
-    id, "order",
+    exchange_trade_id, order_id,
     timestamp, datetime,
     symbol, side,
     price, amount, cost,
     taker_or_maker, type,
     fee_json, fees_json, info_json
 ) VALUES (
-    'btc_trade_001', 'btc_buy_001',
+    'btc_trade_001', 1,
     1734499260500, '2024-12-18T07:21:00.500Z',
     'BTC/USDT', 'buy',
     45000.0, 0.001, 45.0,
@@ -81,16 +90,16 @@ INSERT INTO trades (
     '{"trade_id": "12345678", "exchange": "binance"}'
 );
 
--- Трейды для btc_sell_001 (deal #1)
+-- Трейды для order_id=2 (btc_sell_001, deal #1)
 INSERT INTO trades (
-    id, "order",
+    exchange_trade_id, order_id,
     timestamp, datetime,
     symbol, side,
     price, amount, cost,
     taker_or_maker, type,
     fee_json, fees_json, info_json
 ) VALUES (
-    'btc_trade_002', 'btc_sell_001',
+    'btc_trade_002', 2,
     1734502800500, '2024-12-18T08:20:00.500Z',
     'BTC/USDT', 'sell',
     45675.0, 0.001, 45.675,
@@ -100,16 +109,16 @@ INSERT INTO trades (
     '{"trade_id": "12345679", "exchange": "binance"}'
 );
 
--- Трейды для eth_buy_001 (deal #2)
+-- Трейды для order_id=3 (eth_buy_001, deal #2)
 INSERT INTO trades (
-    id, "order",
+    exchange_trade_id, order_id,
     timestamp, datetime,
     symbol, side,
     price, amount, cost,
     taker_or_maker, type,
     fee_json, fees_json, info_json
 ) VALUES (
-    'eth_trade_001', 'eth_buy_001',
+    'eth_trade_001', 3,
     1734502860500, '2024-12-18T08:21:00.500Z',
     'ETH/USDT', 'buy',
     2500.0, 0.02, 50.0,
@@ -119,16 +128,16 @@ INSERT INTO trades (
     '{"trade_id": "23456789", "exchange": "binance"}'
 );
 
--- Трейды для sol_buy_001 (deal #4)
+-- Трейды для order_id=5 (sol_buy_001, deal #4)
 INSERT INTO trades (
-    id, "order",
+    exchange_trade_id, order_id,
     timestamp, datetime,
     symbol, side,
     price, amount, cost,
     taker_or_maker, type,
     fee_json, fees_json, info_json
 ) VALUES (
-    'sol_trade_001', 'sol_buy_001',
+    'sol_trade_001', 5,
     1734503460500, '2024-12-18T08:31:00.500Z',
     'SOL/USDT', 'buy',
     100.0, 1.0, 100.0,
@@ -138,16 +147,16 @@ INSERT INTO trades (
     '{"trade_id": "34567890", "exchange": "binance"}'
 );
 
--- Трейды для btc_buy_002 (deal #6)
+-- Трейды для order_id=7 (btc_buy_002, deal #6)
 INSERT INTO trades (
-    id, "order",
+    exchange_trade_id, order_id,
     timestamp, datetime,
     symbol, side,
     price, amount, cost,
     taker_or_maker, type,
     fee_json, fees_json, info_json
 ) VALUES (
-    'btc_trade_003', 'btc_buy_002',
+    'btc_trade_003', 7,
     1734507060500, '2024-12-18T09:31:00.500Z',
     'BTC/USDT', 'buy',
     44800.0, 0.0015, 67.2,
@@ -157,16 +166,16 @@ INSERT INTO trades (
     '{"trade_id": "45678901", "exchange": "binance"}'
 );
 
--- Трейды для btc_sell_002 (deal #6)
+-- Трейды для order_id=8 (btc_sell_002, deal #6)
 INSERT INTO trades (
-    id, "order",
+    exchange_trade_id, order_id,
     timestamp, datetime,
     symbol, side,
     price, amount, cost,
     taker_or_maker, type,
     fee_json, fees_json, info_json
 ) VALUES (
-    'btc_trade_004', 'btc_sell_002',
+    'btc_trade_004', 8,
     1734510600500, '2024-12-18T10:30:00.500Z',
     'BTC/USDT', 'sell',
     45344.0, 0.0015, 68.016,
@@ -179,14 +188,14 @@ INSERT INTO trades (
 -- Дополнительные трейды: частичное исполнение (пример для тестирования)
 -- Первое исполнение
 INSERT INTO trades (
-    id, "order",
+    exchange_trade_id, order_id,
     timestamp, datetime,
     symbol, side,
     price, amount, cost,
     taker_or_maker, type,
     fee_json, fees_json, info_json
 ) VALUES (
-    'eth_trade_002', 'eth_buy_001',
+    'eth_trade_002', 3,
     1734502861000, '2024-12-18T08:21:01.000Z',
     'ETH/USDT', 'buy',
     2500.5, 0.01, 25.005,
@@ -198,14 +207,14 @@ INSERT INTO trades (
 
 -- Второе исполнение
 INSERT INTO trades (
-    id, "order",
+    exchange_trade_id, order_id,
     timestamp, datetime,
     symbol, side,
     price, amount, cost,
     taker_or_maker, type,
     fee_json, fees_json, info_json
 ) VALUES (
-    'eth_trade_003', 'eth_buy_001',
+    'eth_trade_003', 3,
     1734502862000, '2024-12-18T08:21:02.000Z',
     'ETH/USDT', 'buy',
     2499.5, 0.01, 24.995,
@@ -217,14 +226,14 @@ INSERT INTO trades (
 
 -- Трейд с множественными комиссиями (пример для тестирования fees_json)
 INSERT INTO trades (
-    id, "order",
+    exchange_trade_id, order_id,
     timestamp, datetime,
     symbol, side,
     price, amount, cost,
     taker_or_maker, type,
     fee_json, fees_json, info_json
 ) VALUES (
-    'btc_trade_005', 'btc_buy_001',
+    'btc_trade_005', 1,
     1734499261000, '2024-12-18T07:21:01.000Z',
     'BTC/USDT', 'buy',
     44995.0, 0.0002, 8.999,
@@ -257,18 +266,19 @@ GROUP BY side;
 
 -- Трейды по ордерам
 SELECT
-    "order" as order_id,
+    order_id,
     COUNT(*) as trades_count,
     SUM(amount) as total_amount,
     SUM(cost) as total_cost
 FROM trades
-GROUP BY "order"
-ORDER BY "order";
+GROUP BY order_id
+ORDER BY order_id;
 
 -- Вывод всех тестовых трейдов
 SELECT
     id,
-    "order" as order_id,
+    exchange_trade_id,
+    order_id,
     symbol,
     side,
     taker_or_maker,
@@ -281,12 +291,14 @@ ORDER BY timestamp;
 -- Проверка связей: трейды с их ордерами
 SELECT
     t.id as trade_id,
-    t."order" as order_id,
+    t.exchange_trade_id,
+    t.order_id,
+    o.exchange_order_id,
     o.symbol,
     o.side,
     o.deal_id,
     t.price,
     t.amount
 FROM trades t
-JOIN orders o ON t."order" = o.id
+JOIN orders o ON t.order_id = o.id
 ORDER BY t.timestamp;

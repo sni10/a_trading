@@ -15,8 +15,9 @@ from src.infrastructure.db.session_factory import SqlAlchemySessionFactory
 def _entity_to_model(trade: Trade) -> TradeModel:
     data = trade.to_dict()
     return TradeModel(
-        id=str(data["id"]),
-        order=str(data.get("order", "")),
+        id=int(data["id"]) if data.get("id") is not None else None,
+        exchange_trade_id=str(data["exchange_trade_id"]) if data.get("exchange_trade_id") is not None else None,
+        order_id=int(data["order_id"]) if data.get("order_id") is not None else None,
         timestamp=int(data["timestamp"]),
         datetime=str(data["datetime"]),
         symbol=str(data["symbol"]),
@@ -36,7 +37,8 @@ def _model_to_entity(model: TradeModel) -> Trade:
     return Trade.from_dict(
         {
             "id": model.id,
-            "order": model.order,
+            "exchange_trade_id": model.exchange_trade_id,
+            "order_id": model.order_id,
             "timestamp": model.timestamp,
             "datetime": model.datetime,
             "symbol": model.symbol,
@@ -64,16 +66,16 @@ class SqlAlchemyTradeRepository(ITradeRepository):
         with self._sf.session_scope() as session:
             session.merge(model)
 
-    def get_by_id(self, trade_id: str) -> Trade | None:
+    def get_by_id(self, trade_id: int) -> Trade | None:
         with self._sf.session_scope() as session:
             model = session.get(TradeModel, trade_id)
             return _model_to_entity(model) if model is not None else None
 
-    def list_by_order_id(self, order_id: str, *, limit: int = 500) -> List[Trade]:
+    def list_by_order_id(self, order_id: int, *, limit: int = 500) -> List[Trade]:
         with self._sf.session_scope() as session:
             stmt = (
                 select(TradeModel)
-                .where(TradeModel.order == order_id)
+                .where(TradeModel.order_id == order_id)
                 .order_by(TradeModel.timestamp.desc())
                 .limit(limit)
             )

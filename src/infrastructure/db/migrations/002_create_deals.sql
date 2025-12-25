@@ -2,13 +2,15 @@
 -- Description: Создание таблицы сделок (пара ордеров: покупка + продажа)
 -- Created: 2024-12-18
 
+SET search_path TO main;
+
 -- ============================================================================
 -- CREATE TABLE
 -- ============================================================================
 
 CREATE TABLE IF NOT EXISTS deals (
     -- Primary key
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
 
     -- Идентификация
     symbol VARCHAR(32) NOT NULL,
@@ -24,15 +26,15 @@ CREATE TABLE IF NOT EXISTS deals (
     sell_order_json TEXT,
 
     -- Целевые параметры
-    target_amount REAL NOT NULL DEFAULT 0.0,
-    target_buy_price REAL,
-    target_sell_price REAL,
-    expected_profit REAL,
+    target_amount DOUBLE PRECISION NOT NULL DEFAULT 0.0,
+    target_buy_price DOUBLE PRECISION,
+    target_sell_price DOUBLE PRECISION,
+    expected_profit DOUBLE PRECISION,
 
     -- Риск-менеджмент
-    stop_loss_price REAL,
-    take_profit_price REAL,
-    max_loss_amount REAL,
+    stop_loss_price DOUBLE PRECISION,
+    take_profit_price DOUBLE PRECISION,
+    max_loss_amount DOUBLE PRECISION,
 
     -- Метаданные
     strategy_name VARCHAR(64),
