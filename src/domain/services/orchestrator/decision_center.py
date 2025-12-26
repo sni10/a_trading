@@ -2,7 +2,6 @@ from __future__ import annotations
 
 """Боевой центр принятия решений (BUY/HOLD)."""
 
-import math
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable
 
@@ -15,17 +14,24 @@ from src.domain.services.market_data.order_book_analyzer import (
 from src.domain.services.market_data.order_book_provider import (
     get_order_book_from_context,
 )
+from src.domain.services.risk.risk_manager import RiskManager
 from src.domain.services.trading.signal_cooldown_manager import SignalCooldownManager
+from src.domain.services.trading.strategy_calculator import (
+    StrategyCalculator,
+    StrategyCalculationFailure,
+)
 
 
 @dataclass(frozen=True)
 class DecisionPayload:
     """Собранные данные для решения BUY."""
 
-    price: float
+    buy_price: float
+    buy_amount: float
+    sell_price: float
+    sell_amount: float
     budget: float | None
-    amount: float | None
-    target_sell_price: float | None
+    net_profit: float | None
 
 
 class DecisionCenter:
@@ -36,9 +42,13 @@ class DecisionCenter:
         *,
         orderbook_analyzer: OrderBookAnalyzer | None = None,
         cooldown_manager: SignalCooldownManager | None = None,
+        calculator: StrategyCalculator | None = None,
+        risk_manager: RiskManager | None = None,
     ) -> None:
         self._orderbook_analyzer = orderbook_analyzer or OrderBookAnalyzer()
         self._cooldown_manager = cooldown_manager or SignalCooldownManager()
+        self._calculator = calculator or StrategyCalculator()
+        self._risk_manager = risk_manager or RiskManager()
 
     def decide(
         self,
@@ -53,52 +63,44 @@ class DecisionCenter:
 
         ts = context.get("market", {}).get(symbol, {}).get("ts")
         base_hold = {"action": "HOLD", "reason": "no_action", "ts": ts}
-
         buy_intent = self._select_buy_intent(intents)
         if buy_intent is None:
             return base_hold
-
         order_block_reason = self._check_order_blocks(context, symbol)
         if order_block_reason:
             return {"action": "HOLD", "reason": order_block_reason, "ts": ts}
-
         limit_reason = self._check_limits_and_cooldown(context, symbol, ts)
         if limit_reason:
             return {"action": "HOLD", "reason": limit_reason, "ts": ts}
-
         orderbook_signal = self._check_orderbook(context, symbol)
         if orderbook_signal in {OrderBookSignal.REJECT, OrderBookSignal.WEAK_SELL, OrderBookSignal.STRONG_SELL}:
             return {"action": "HOLD", "reason": "orderbook_reject", "ts": ts}
-
         price = self._get_last_price(context, symbol)
         if price is None:
             return {"action": "HOLD", "reason": "no_price", "ts": ts}
-
         payload = self._build_payload(context, symbol, price)
-        amount_for_risk = payload.amount
-        intent_amount = (buy_intent.get("params") or {}).get("amount")
-        if amount_for_risk is None and intent_amount is not None:
-            try:
-                amount_for_risk = float(intent_amount)
-            except (TypeError, ValueError):
-                amount_for_risk = None
-        risk_reason = self._check_risk_limit(context, symbol, amount_for_risk)
-        if risk_reason:
-            return {"action": "HOLD", "reason": risk_reason, "ts": ts}
-
+        if isinstance(payload, StrategyCalculationFailure):
+            return {"action": "HOLD", "reason": payload.reason, "ts": ts}
+        risk_decision = self._risk_manager.evaluate_buy(
+            context,
+            symbol=symbol,
+            buy_price=payload.buy_price,
+            buy_amount=payload.buy_amount,
+            budget=payload.budget,
+        )
+        if not risk_decision.allowed:
+            return {"action": "HOLD", "reason": risk_decision.reason, "ts": ts}
         decision = self._build_decision(
             buy_intent=buy_intent,
             payload=payload,
             orderbook_signal=orderbook_signal,
             ts=ts,
         )
-
         if logger:
             logger.log_info(
                 f"🧩 [ORCH] BUY подтверждён | ticker_id: {ticker_id} | symbol: {symbol} | "
-                f"price: {payload.price:.8f} | confidence: {decision.get('confidence')}"
+                f"price: {payload.buy_price:.8f} | confidence: {decision.get('confidence')}"
             )
-
         return decision
 
     def _select_buy_intent(self, intents: Iterable[Dict[str, Any]]) -> Dict[str, Any] | None:
@@ -150,31 +152,39 @@ class DecisionCenter:
 
     def _build_payload(
         self, context: Dict[str, Any], symbol: str, price: float
-    ) -> DecisionPayload:
+    ) -> DecisionPayload | StrategyCalculationFailure:
         pair = self._get_pair(context, symbol)
-        budget = pair.deal_quota if pair else None
-        profit_markup = pair.profit_markup if pair else None
-        min_step = pair.min_step if pair else None
-        price_step = pair.price_step if pair else None
+        if pair is None:
+            return StrategyCalculationFailure("pair_not_loaded")
 
-        buy_price = _round_down_to_step(price, price_step) if price_step else price
-        amount = None
-        if budget is not None and buy_price > 0:
-            amount = budget / buy_price
-            if min_step:
-                amount = _round_down_to_step(amount, min_step)
+        budget = pair.deal_quota
+        profit_markup = pair.profit_markup
+        min_step = pair.min_step
+        price_step = pair.price_step
 
-        target_sell_price = None
-        if profit_markup is not None:
-            target_sell_price = buy_price * (1.0 + (profit_markup / 100.0))
-            if price_step:
-                target_sell_price = _round_up_to_step(target_sell_price, price_step)
+        risk_cfg = context.get("risk", {}).get(symbol) or {}
+        buy_fee_percent = _safe_float(risk_cfg.get("buy_fee_percent", 0.1))
+        sell_fee_percent = _safe_float(risk_cfg.get("sell_fee_percent", 0.1))
+
+        result = self._calculator.calculate(
+            buy_price=price,
+            budget=budget,
+            min_step=min_step,
+            price_step=price_step,
+            buy_fee_percent=buy_fee_percent,
+            sell_fee_percent=sell_fee_percent,
+            profit_percent=profit_markup,
+        )
+        if isinstance(result, StrategyCalculationFailure):
+            return result
 
         return DecisionPayload(
-            price=buy_price,
+            buy_price=result.buy_price,
+            buy_amount=result.buy_amount,
+            sell_price=result.sell_price,
+            sell_amount=result.sell_amount,
             budget=budget,
-            amount=amount,
-            target_sell_price=target_sell_price,
+            net_profit=result.net_profit,
         )
 
     def _build_decision(
@@ -197,13 +207,14 @@ class DecisionCenter:
             confidence = min(1.0, confidence + 0.1)
 
         params = dict(buy_intent.get("params") or {})
-        params.setdefault("price", payload.price)
+        params.setdefault("price", payload.buy_price)
         if payload.budget is not None:
             params.setdefault("budget", payload.budget)
-        if payload.amount is not None:
-            params.setdefault("amount", payload.amount)
-        if payload.target_sell_price is not None:
-            params.setdefault("target_sell_price", payload.target_sell_price)
+        params.setdefault("amount", payload.buy_amount)
+        params.setdefault("sell_amount", payload.sell_amount)
+        params.setdefault("target_sell_price", payload.sell_price)
+        if payload.net_profit is not None:
+            params.setdefault("net_profit", payload.net_profit)
         if orderbook_signal is not None:
             params.setdefault("orderbook_signal", orderbook_signal.value)
 
@@ -231,61 +242,20 @@ class DecisionCenter:
 
     def _check_order_blocks(self, context: Dict[str, Any], symbol: str) -> str | None:
         orders = (context.get("orders") or {}).get(symbol) or []
+        has_unclosed_sell = any(
+            str(getattr(order, "side", "")).lower() == "sell"
+            and str(getattr(order, "status", "")).lower() not in {"closed", "canceled"}
+            for order in orders
+        )
+        if has_unclosed_sell:
+            return "sell_not_closed"
         has_open_orders = any(
             str(getattr(order, "status", "")).lower() == "open"
             for order in orders
         )
         if has_open_orders:
             return "open_orders_blocked"
-
-        has_unclosed_sell = any(
-            str(getattr(order, "side", "")).lower() == "sell"
-            and str(getattr(order, "status", "")).lower() != "closed"
-            for order in orders
-        )
-        if has_unclosed_sell:
-            return "sell_not_closed"
         return None
-
-    def _check_risk_limit(
-        self,
-        context: Dict[str, Any],
-        symbol: str,
-        amount: float | None,
-    ) -> str | None:
-        if amount is None:
-            return None
-        risk_cfg = context.get("risk", {}).get(symbol) or {}
-        max_amount = risk_cfg.get("max_amount")
-        try:
-            max_amount_value = float(max_amount) if max_amount is not None else None
-        except (TypeError, ValueError):
-            max_amount_value = None
-
-        if max_amount_value is not None and amount > max_amount_value:
-            return "risk_limit_exceeded"
-        return None
-
-
-def _round_down_to_step(value: float, step: float) -> float:
-    if step <= 0:
-        return value
-    precision = _step_precision(step)
-    return round(math.floor(value / step) * step, precision)
-
-
-def _round_up_to_step(value: float, step: float) -> float:
-    if step <= 0:
-        return value
-    precision = _step_precision(step)
-    return round(math.ceil(value / step) * step, precision)
-
-
-def _step_precision(step: float) -> int:
-    text = f"{step:.12f}".rstrip("0").rstrip(".")
-    if "." in text:
-        return len(text.split(".")[1])
-    return 0
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:

@@ -14,6 +14,8 @@ from typing import Any, Dict
 from src.domain.interfaces.logger import ILogger
 from src.domain.services.context.state import record_indicators
 
+_RESERVED_KEYS = {"symbol", "ticker_id", "price", "sma", "rsi", "ts"}
+
 
 def create_indicator_snapshot(
     *,
@@ -49,17 +51,9 @@ def create_indicator_snapshot(
     # Извлечение timestamp из контекста
     ts = context.get("market", {}).get(symbol, {}).get("ts")
 
-    # --- Backward compatibility: placeholder-поля для старых API ---
-    # Поля "sma" и "rsi" поддерживаем для обратной совместимости:
-    # если доступны реальные индикаторы, используем их, иначе
-    # остаёмся на простых заглушках.
-    sma_placeholder = float(last_price)
-    if "sma_7" in indicators:
-        sma_placeholder = float(indicators["sma_7"])
-
-    rsi_placeholder = 50.0
-    if "rsi_5" in indicators:
-        rsi_placeholder = float(indicators["rsi_5"])
+    merged_indicators = _merge_indicators(context, symbol, indicators)
+    sma_placeholder = _select_sma_placeholder(last_price, merged_indicators)
+    rsi_placeholder = _select_rsi_placeholder(merged_indicators)
 
     # Создание snapshot-словаря
     snapshot: Dict[str, Any] = {
@@ -69,7 +63,7 @@ def create_indicator_snapshot(
         "sma": sma_placeholder,
         "rsi": rsi_placeholder,
         "ts": ts,
-        **indicators,
+        **merged_indicators,
     }
 
     # Сохраняем снимок в общем контексте и его историю, чтобы потом
@@ -93,6 +87,40 @@ def create_indicator_snapshot(
         )
 
     return snapshot
+
+
+def _merge_indicators(
+    context: Dict[str, Any],
+    symbol: str,
+    indicators: Dict[str, Any],
+) -> Dict[str, Any]:
+    previous = (context.get("indicators") or {}).get(symbol)
+    merged: Dict[str, Any] = {}
+    if isinstance(previous, dict):
+        merged.update({key: value for key, value in previous.items() if key not in _RESERVED_KEYS})
+    if indicators:
+        merged.update({key: value for key, value in indicators.items() if key not in _RESERVED_KEYS})
+    return merged
+
+
+def _select_sma_placeholder(last_price: float, indicators: Dict[str, Any]) -> float:
+    value = indicators.get("sma_7")
+    if value is not None:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            pass
+    return float(last_price)
+
+
+def _select_rsi_placeholder(indicators: Dict[str, Any]) -> float:
+    value = indicators.get("rsi_5")
+    if value is not None:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            pass
+    return 50.0
 
 
 __all__ = ["create_indicator_snapshot"]

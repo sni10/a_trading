@@ -116,7 +116,8 @@ def test_decide_builds_buy_decision_with_budget_and_target():
 
     assert result["action"] == "BUY"
     assert result["params"]["budget"] == 50.0
-    assert result["params"]["amount"] == 0.5
+    assert result["params"]["amount"] == pytest.approx(0.499, rel=1e-3)
+    assert result["params"]["sell_amount"] == pytest.approx(0.499, rel=1e-3)
     assert result["params"]["target_sell_price"] == 101.5
 
 
@@ -124,11 +125,22 @@ def test_decide_builds_buy_decision_with_budget_and_target():
 def test_decide_respects_risk_limit_when_amount_within_limit():
     """Если объём сделки не превышает риск-лимит, решение остаётся BUY."""
     intents = [
-        {"action": "BUY", "reason": "signal", "params": {"amount": 0.5}},
+        {"action": "BUY", "reason": "signal"},
     ]
     context = {
         "market": {"BTC/USDT": {"ts": 2222222222, "last_price": 100.0}},
         "risk": {"BTC/USDT": {"max_amount": 1.0}},
+        "pairs": {
+            "BTC/USDT": CurrencyPair(
+                symbol="BTC/USDT",
+                base_currency="BTC",
+                quote_currency="USDT",
+                deal_quota=50.0,
+                profit_markup=1.5,
+                min_step=0.001,
+                price_step=0.01,
+            )
+        },
         "market_caches": {
             "BTC/USDT": _FakeMarketCache(_neutral_orderbook("BTC/USDT"), "BTC/USDT")
         },
@@ -144,11 +156,22 @@ def test_decide_respects_risk_limit_when_amount_within_limit():
 def test_decide_downgrades_to_hold_when_risk_limit_exceeded():
     """Если объём сделки превышает риск-лимит, решение понижается до HOLD."""
     intents = [
-        {"action": "BUY", "reason": "signal", "params": {"amount": 2.0}},
+        {"action": "BUY", "reason": "signal"},
     ]
     context = {
         "market": {"BTC/USDT": {"ts": 3333333333, "last_price": 100.0}},
-        "risk": {"BTC/USDT": {"max_amount": 1.0}},
+        "risk": {"BTC/USDT": {"max_amount": 0.3}},
+        "pairs": {
+            "BTC/USDT": CurrencyPair(
+                symbol="BTC/USDT",
+                base_currency="BTC",
+                quote_currency="USDT",
+                deal_quota=50.0,
+                profit_markup=1.5,
+                min_step=0.001,
+                price_step=0.01,
+            )
+        },
         "market_caches": {
             "BTC/USDT": _FakeMarketCache(_neutral_orderbook("BTC/USDT"), "BTC/USDT")
         },
@@ -248,7 +271,7 @@ def test_decide_blocks_on_unclosed_sell():
 
     class _Order:
         def __init__(self):
-            self.status = "canceled"
+            self.status = "open"
             self.side = "sell"
 
     context["orders"]["BTC/USDT"] = [_Order()]
@@ -272,9 +295,45 @@ def test_decide_blocks_on_cooldown():
                 "last_buy_ts": now_ts - 1_000,
             }
         },
+        "market_caches": {
+            "BTC/USDT": _FakeMarketCache(_neutral_orderbook("BTC/USDT"), "BTC/USDT")
+        },
     }
 
     result = decide(intents, context, ticker_id=12, symbol="BTC/USDT")
 
     assert result["action"] == "HOLD"
     assert result["reason"] == "buy_cooldown_active"
+
+
+@pytest.mark.unit
+def test_decide_blocks_on_kill_switch():
+    """Kill-switch блокирует BUY."""
+    intents = [{"action": "BUY", "reason": "signal"}]
+    context = {
+        "market": {"BTC/USDT": {"ts": 9_000_000_000_000, "last_price": 100.0}},
+        "pairs": {
+            "BTC/USDT": CurrencyPair(
+                symbol="BTC/USDT",
+                base_currency="BTC",
+                quote_currency="USDT",
+                deal_quota=50.0,
+                profit_markup=1.5,
+                min_step=0.001,
+                price_step=0.01,
+            )
+        },
+        "risk": {
+            "BTC/USDT": {
+                "kill_switch": True,
+            }
+        },
+        "market_caches": {
+            "BTC/USDT": _FakeMarketCache(_neutral_orderbook("BTC/USDT"), "BTC/USDT")
+        },
+    }
+
+    result = decide(intents, context, ticker_id=13, symbol="BTC/USDT")
+
+    assert result["action"] == "HOLD"
+    assert result["reason"] == "kill_switch"

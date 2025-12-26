@@ -121,6 +121,13 @@ class IndicatorEngine:
 
             # Сохраняем «сырые» значения цены в истории fast‑слоя.
             store.fast_history.append(last_price)  # type: ignore[attr-defined]
+            self._log_layer_update(
+                layer="fast",
+                ticker_id=ticker_id,
+                symbol=str(ticker.get("symbol") or ""),
+                history_len=len(store.fast_history),  # type: ignore[arg-type]
+                interval=store.fast_interval,
+            )
 
         # --- MEDIUM слой ---
         if store.should_update_medium(ticker_id):
@@ -133,6 +140,13 @@ class IndicatorEngine:
 
             # История medium‑слоя для возможных альтернативных расчётов в будущем.
             store.medium_history.append(last_price)  # type: ignore[attr-defined]
+            self._log_layer_update(
+                layer="medium",
+                ticker_id=ticker_id,
+                symbol=str(ticker.get("symbol") or ""),
+                history_len=len(store.medium_history),  # type: ignore[arg-type]
+                interval=store.medium_interval,
+            )
 
         # --- HEAVY слой ---
         if store.should_update_heavy(ticker_id):
@@ -145,8 +159,31 @@ class IndicatorEngine:
 
             # История heavy‑слоя.
             store.heavy_history.append(last_price)  # type: ignore[attr-defined]
+            self._log_layer_update(
+                layer="heavy",
+                ticker_id=ticker_id,
+                symbol=str(ticker.get("symbol") or ""),
+                history_len=len(store.heavy_history),  # type: ignore[arg-type]
+                interval=store.heavy_interval,
+            )
 
         return indicators
+
+    def _log_layer_update(
+        self,
+        *,
+        layer: str,
+        ticker_id: int,
+        symbol: str,
+        history_len: int,
+        interval: int,
+    ) -> None:
+        if not self._logger:
+            return
+        self._logger.log_info(
+            f"📊 [IND] Сохранён слой {layer} | ticker_id: {ticker_id} | "
+            f"symbol: {symbol} | history_len: {history_len} | interval: {interval}"
+        )
 
 
 def compute_indicators(

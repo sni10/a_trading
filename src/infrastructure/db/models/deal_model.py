@@ -27,8 +27,6 @@ class DealModel(Base):
     target_sell_price: Mapped[float | None] = mapped_column(Float, nullable=True)
     expected_profit: Mapped[float | None] = mapped_column(Float, nullable=True)
 
-    stop_loss_price: Mapped[float | None] = mapped_column(Float, nullable=True)
-    take_profit_price: Mapped[float | None] = mapped_column(Float, nullable=True)
     max_loss_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     strategy_name: Mapped[str | None] = mapped_column(String(64), nullable=True)

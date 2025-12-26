@@ -27,8 +27,6 @@ def _model_to_entity(model: DealModel) -> Deal:
             "target_buy_price": model.target_buy_price,
             "target_sell_price": model.target_sell_price,
             "expected_profit": model.expected_profit,
-            "stop_loss_price": model.stop_loss_price,
-            "take_profit_price": model.take_profit_price,
             "max_loss_amount": model.max_loss_amount,
             "strategy_name": model.strategy_name,
             "metadata": model.metadata_json,
@@ -56,8 +54,6 @@ class SqlAlchemyDealRepository(IDealRepository):
                 target_buy_price=deal.target_buy_price,
                 target_sell_price=deal.target_sell_price,
                 expected_profit=deal.expected_profit,
-                stop_loss_price=deal.stop_loss_price,
-                take_profit_price=deal.take_profit_price,
                 max_loss_amount=deal.max_loss_amount,
                 strategy_name=deal.strategy_name,
                 metadata_json=dict(deal.metadata or {}),
@@ -85,8 +81,6 @@ class SqlAlchemyDealRepository(IDealRepository):
                         target_buy_price=deal.target_buy_price,
                         target_sell_price=deal.target_sell_price,
                         expected_profit=deal.expected_profit,
-                        stop_loss_price=deal.stop_loss_price,
-                        take_profit_price=deal.take_profit_price,
                         max_loss_amount=deal.max_loss_amount,
                         strategy_name=deal.strategy_name,
                         metadata_json=dict(deal.metadata or {}),
@@ -105,8 +99,6 @@ class SqlAlchemyDealRepository(IDealRepository):
             model.target_buy_price = deal.target_buy_price
             model.target_sell_price = deal.target_sell_price
             model.expected_profit = deal.expected_profit
-            model.stop_loss_price = deal.stop_loss_price
-            model.take_profit_price = deal.take_profit_price
             model.max_loss_amount = deal.max_loss_amount
             model.strategy_name = deal.strategy_name
             model.metadata_json = dict(deal.metadata or {})

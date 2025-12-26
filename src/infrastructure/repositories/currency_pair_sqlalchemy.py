@@ -23,6 +23,7 @@ def _model_to_entity(model: CurrencyPairModel) -> CurrencyPair:
             "profit_markup": model.profit_markup,
             "deal_count": model.deal_count,
             "order_life_time": model.order_life_time,
+            "max_loss_amount": model.max_loss_amount,
             "min_step": model.min_step,
             "price_step": model.price_step,
             "enabled": model.enabled,
@@ -75,6 +76,7 @@ class SqlAlchemyCurrencyPairRepository(ICurrencyPairRepository):
                     profit_markup=pair.profit_markup,
                     deal_count=pair.deal_count,
                     order_life_time=pair.order_life_time,
+                    max_loss_amount=pair.max_loss_amount,
                     min_step=pair.min_step,
                     price_step=pair.price_step,
                     created_at=pair.created_at,
@@ -89,6 +91,7 @@ class SqlAlchemyCurrencyPairRepository(ICurrencyPairRepository):
                 existing.profit_markup = pair.profit_markup
                 existing.deal_count = pair.deal_count
                 existing.order_life_time = pair.order_life_time
+                existing.max_loss_amount = pair.max_loss_amount
                 existing.min_step = pair.min_step
                 existing.price_step = pair.price_step
                 existing.updated_at = pair.updated_at

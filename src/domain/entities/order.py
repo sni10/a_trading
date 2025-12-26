@@ -54,8 +54,6 @@ class Order:
 
     # Триггерные цены (для стоп-ордеров)
     trigger_price: float | None = None         # Цена активации триггера
-    stop_loss_price: float | None = None       # Цена стоп-лосс
-    take_profit_price: float | None = None     # Цена тейк-профит
 
     # Комиссии и трейды
     fee: OrderFee | None = None                # Комиссия за ордер
@@ -143,8 +141,6 @@ class Order:
             post_only=bool(ccxt_order.get('postOnly', False)),
             reduce_only=bool(ccxt_order.get('reduceOnly', False)),
             trigger_price=float(ccxt_order['triggerPrice']) if ccxt_order.get('triggerPrice') else None,
-            stop_loss_price=float(ccxt_order['stopLossPrice']) if ccxt_order.get('stopLossPrice') else None,
-            take_profit_price=float(ccxt_order['takeProfitPrice']) if ccxt_order.get('takeProfitPrice') else None,
             fee=fee,
             trades=trade_ids,
             info=ccxt_order.get('info', {}),
@@ -197,8 +193,6 @@ class Order:
             post_only=bool(data.get("post_only", False)),
             reduce_only=bool(data.get("reduce_only", False)),
             trigger_price=float(data["trigger_price"]) if data.get("trigger_price") is not None else None,
-            stop_loss_price=float(data["stop_loss_price"]) if data.get("stop_loss_price") is not None else None,
-            take_profit_price=float(data["take_profit_price"]) if data.get("take_profit_price") is not None else None,
             fee=fee,
             trades=trade_ids,
             info=info_dict,
@@ -227,8 +221,6 @@ class Order:
             'post_only': self.post_only,
             'reduce_only': self.reduce_only,
             'trigger_price': self.trigger_price,
-            'stop_loss_price': self.stop_loss_price,
-            'take_profit_price': self.take_profit_price,
             'fee': {
                 'currency': self.fee.currency,
                 'cost': self.fee.cost,

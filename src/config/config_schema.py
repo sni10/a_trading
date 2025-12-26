@@ -144,6 +144,7 @@ class AppConfig:
     exchange_id: str = "binance"
     sandbox_mode: bool = False
     order_book_refresh_interval_seconds: float = 5.0
+    buy_order_timeout_sec: float = 30.0
 
     # API‑ключи биржи. На раннем этапе они опциональны: если заданы,
     # коннектор будет аутентифицироваться и сможет работать с приватными
@@ -213,6 +214,9 @@ class AppConfig:
 
         if self.order_book_refresh_interval_seconds <= 0:
             raise ValueError("order_book_refresh_interval_seconds must be > 0")
+
+        if self.buy_order_timeout_sec < 0:
+            raise ValueError("buy_order_timeout_sec must be >= 0")
 
         if self.state_snapshot_interval_ticks < 0:
             raise ValueError("state_snapshot_interval_ticks must be >= 0")

@@ -24,6 +24,7 @@ class CurrencyPairModel(Base):
     profit_markup: Mapped[float] = mapped_column(Float, default=1.5)
     deal_count: Mapped[int] = mapped_column(Integer, default=3)
     order_life_time: Mapped[int] = mapped_column(Integer, default=1)
+    max_loss_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     # Exchange params
     min_step: Mapped[float] = mapped_column(Float, default=0.00001)

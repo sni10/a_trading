@@ -111,4 +111,26 @@ def read_key_file(var_name: str) -> str | None:
         return None
 
 
-__all__ = ["load_local_env_file", "read_key_file"]
+def read_exchange_key(exchange_id: str, filename: str) -> str | None:
+    """Прочитать ключ из secure_api_keys/{exchange_id}/{filename}."""
+    if not exchange_id:
+        return None
+
+    root_dir = Path(__file__).resolve().parents[2]
+    file_path = root_dir / "secure_api_keys" / exchange_id / filename
+    if not file_path.is_file():
+        return None
+
+    try:
+        return file_path.read_text(encoding="utf-8").strip()
+    except OSError as exc:  # pragma: no cover - защита от средовых ошибок
+        log_stage(
+            "WARN",
+            "Не удалось прочитать файл API‑ключа",
+            path=str(file_path),
+            error=str(exc),
+        )
+        return None
+
+
+__all__ = ["load_local_env_file", "read_key_file", "read_exchange_key"]

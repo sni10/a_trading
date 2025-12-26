@@ -25,6 +25,7 @@ class CurrencyPair:
         profit_markup: float = 1.5,
         deal_count: int = 3,
         order_life_time: int = 1,
+        max_loss_amount: float | None = None,
         # Exchange technical params (получаются с биржи)
         min_step: float = 0.00001,
         price_step: float = 0.01,
@@ -46,6 +47,7 @@ class CurrencyPair:
             profit_markup: Желаемый профит в % (например 1.5 = 1.5%)
             deal_count: Макс. количество одновременно открытых сделок
             order_life_time: Время жизни ордера в минутах до отмены
+            max_loss_amount: Максимально допустимый убыток в quote валюте
 
             # Exchange params (технические ограничения биржи):
             min_step: Минимальный шаг количества (lot size step)
@@ -77,6 +79,7 @@ class CurrencyPair:
         self.profit_markup = profit_markup
         self.deal_count = deal_count
         self.order_life_time = order_life_time
+        self.max_loss_amount = max_loss_amount
 
         # --- Exchange params ---
 
@@ -116,6 +119,7 @@ class CurrencyPair:
             "profit_markup": self.profit_markup,
             "deal_count": self.deal_count,
             "order_life_time": self.order_life_time,
+            "max_loss_amount": self.max_loss_amount,
             # Exchange
             "min_step": self.min_step,
             "price_step": self.price_step,

@@ -10,7 +10,7 @@ import os
 
 from src.config.config_parsers import parse_bool, parse_float, parse_int
 from src.config.config_schema import AppConfig
-from src.config.env_file_loader import load_local_env_file, read_key_file
+from src.config.env_file_loader import load_local_env_file, read_exchange_key, read_key_file
 
 
 def load_config(
@@ -95,8 +95,12 @@ def load_config(
     if env_exchange_id:
         base.exchange_id = env_exchange_id
 
-    env_sandbox = os.getenv("EXCHANGE_SANDBOX_MODE")
-    base.sandbox_mode = parse_bool(env_sandbox, base.sandbox_mode)
+    env_testnet = os.getenv("EXCHANGE_TESTNET")
+    if env_testnet is not None:
+        base.sandbox_mode = parse_bool(env_testnet, base.sandbox_mode)
+    else:
+        env_sandbox = os.getenv("EXCHANGE_SANDBOX_MODE")
+        base.sandbox_mode = parse_bool(env_sandbox, base.sandbox_mode)
 
     env_ob_interval = os.getenv("ORDER_BOOK_REFRESH_INTERVAL_SECONDS")
     base.order_book_refresh_interval_seconds = parse_float(
@@ -104,8 +108,15 @@ def load_config(
         base.order_book_refresh_interval_seconds,
     )
 
+    env_buy_timeout = os.getenv("BUY_ORDER_TIMEOUT_SEC")
+    base.buy_order_timeout_sec = parse_float(
+        env_buy_timeout,
+        base.buy_order_timeout_sec,
+    )
+
     # --- API‑ключи биржи ---
-    # Приоритет: прямые значения в env, затем файлы.
+    # Приоритет: прямые значения в env, затем файлы из env,
+    # затем secure_api_keys/{exchange_id}/api_key.txt (api_secret.txt).
     env_api_key = os.getenv("EXCHANGE_API_KEY")
     env_api_secret = os.getenv("EXCHANGE_API_SECRET")
 
@@ -113,6 +124,8 @@ def load_config(
         base.exchange_api_key = env_api_key
     else:
         file_key = read_key_file("EXCHANGE_API_KEY_FILE")
+        if file_key is None:
+            file_key = read_exchange_key(base.exchange_id, "api_key.txt")
         if file_key is not None:
             base.exchange_api_key = file_key
 
@@ -120,6 +133,12 @@ def load_config(
         base.exchange_api_secret = env_api_secret
     else:
         file_secret = read_key_file("EXCHANGE_API_SECRET_FILE")
+        if file_secret is None:
+            file_secret = read_exchange_key(base.exchange_id, "api_secret.txt")
+        if file_secret is None:
+            file_secret = read_exchange_key(base.exchange_id, "id_ed25519.pem")
+        if file_secret is None:
+            file_secret = read_exchange_key(base.exchange_id, "private_key.pem")
         if file_secret is not None:
             base.exchange_api_secret = file_secret
 

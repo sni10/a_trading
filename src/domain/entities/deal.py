@@ -45,8 +45,6 @@ class Deal:
     expected_profit: float | None = None       # Ожидаемая прибыль
 
     # Риск-менеджмент
-    stop_loss_price: float | None = None       # Цена стоп-лосс
-    take_profit_price: float | None = None     # Цена тейк-профит
     max_loss_amount: float | None = None       # Максимально допустимый убыток
 
     # Метаданные
@@ -232,8 +230,6 @@ class Deal:
             target_buy_price=float(data["target_buy_price"]) if data.get("target_buy_price") is not None else None,
             target_sell_price=float(data["target_sell_price"]) if data.get("target_sell_price") is not None else None,
             expected_profit=float(data["expected_profit"]) if data.get("expected_profit") is not None else None,
-            stop_loss_price=float(data["stop_loss_price"]) if data.get("stop_loss_price") is not None else None,
-            take_profit_price=float(data["take_profit_price"]) if data.get("take_profit_price") is not None else None,
             max_loss_amount=float(data["max_loss_amount"]) if data.get("max_loss_amount") is not None else None,
             strategy_name=str(data["strategy_name"]) if data.get("strategy_name") is not None else None,
             metadata=metadata_dict,
@@ -254,8 +250,6 @@ class Deal:
             'target_buy_price': self.target_buy_price,
             'target_sell_price': self.target_sell_price,
             'expected_profit': self.expected_profit,
-            'stop_loss_price': self.stop_loss_price,
-            'take_profit_price': self.take_profit_price,
             'max_loss_amount': self.max_loss_amount,
             'strategy_name': self.strategy_name,
             'metadata': self.metadata,

@@ -115,21 +115,27 @@ class StateSnapshotService:
         # Deals
         if self._deal_repo:
             deals = (context.get("deals") or {}).get(self._symbol, [])
+            saved_deals = 0
             for deal in deals:
-                if deal.is_active():
+                status = str(getattr(deal, "status", "")).lower()
+                if status:
                     self._deal_repo.update(deal)
+                    saved_deals += 1
             log_stage(
                 "DB_SAVE",
-                f"💾 Сохранено активных сделок: {len([d for d in deals if d.is_active()])}",
+                f"💾 Сохранено сделок (включая canceled): {saved_deals}",
                 symbol=self._symbol,
             )
 
         # Orders
         if self._order_repo:
             orders = (context.get("orders") or {}).get(self._symbol, [])
+            saved_orders = 0
             for order in orders:
-                if order.status in ["open", "closed"]:
+                status = str(getattr(order, "status", "")).lower()
+                if status in ["open", "closed", "canceled"]:
                     self._order_repo.upsert(order)
+                    saved_orders += 1
                     # После upsert загружаем сохраненный order с id из БД
                     if order.exchange_order_id:
                         saved_order = next(
@@ -141,7 +147,7 @@ class StateSnapshotService:
                             order.id = saved_order.id
             log_stage(
                 "DB_SAVE",
-                f"💾 Сохранено ордеров: {len([o for o in orders if o.status in ['open', 'closed']])}",
+                f"💾 Сохранено ордеров (включая canceled): {saved_orders}",
                 symbol=self._symbol,
             )
 

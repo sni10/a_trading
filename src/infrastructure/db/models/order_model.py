@@ -34,8 +34,6 @@ class OrderModel(Base):
     reduce_only: Mapped[bool] = mapped_column(Boolean, default=False)
 
     trigger_price: Mapped[float | None] = mapped_column(Float, nullable=True)
-    stop_loss_price: Mapped[float | None] = mapped_column(Float, nullable=True)
-    take_profit_price: Mapped[float | None] = mapped_column(Float, nullable=True)
 
     fee_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     trades_json: Mapped[list] = mapped_column(JSON, default=list)

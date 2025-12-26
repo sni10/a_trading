@@ -42,8 +42,6 @@ CREATE TABLE IF NOT EXISTS orders (
 
     -- Триггерные цены
     trigger_price DOUBLE PRECISION,
-    stop_loss_price DOUBLE PRECISION,
-    take_profit_price DOUBLE PRECISION,
 
     -- JSON поля
     fee_json TEXT,
@@ -96,7 +94,7 @@ INSERT INTO orders (
     status, side, type,
     amount, price, average, filled, remaining, cost,
     last_trade_timestamp, time_in_force, post_only, reduce_only,
-    trigger_price, stop_loss_price, take_profit_price,
+    trigger_price,
     fee_json, trades_json, info_json,
     deal_id
 ) VALUES (
@@ -104,7 +102,7 @@ INSERT INTO orders (
     'closed', 'buy', 'limit',
     0.001, 45000.0, 45000.0, 0.001, 0.0, 45.0,
     1734499260500, 'GTC', TRUE, FALSE,
-    NULL, NULL, NULL,
+    NULL,
     '{"currency": "USDT", "cost": 0.045, "rate": 0.001}'::json,
     '["1", "9"]'::json,
     '{"exchange": "binance", "order_type": "maker"}'::json,
@@ -117,7 +115,7 @@ INSERT INTO orders (
     status, side, type,
     amount, price, average, filled, remaining, cost,
     last_trade_timestamp, time_in_force, post_only, reduce_only,
-    trigger_price, stop_loss_price, take_profit_price,
+    trigger_price,
     fee_json, trades_json, info_json,
     deal_id
 ) VALUES (
@@ -125,7 +123,7 @@ INSERT INTO orders (
     'closed', 'sell', 'limit',
     0.001, 45675.0, 45675.0, 0.001, 0.0, 45.675,
     1734502800500, 'GTC', TRUE, FALSE,
-    NULL, NULL, NULL,
+    NULL,
     '{"currency": "USDT", "cost": 0.046, "rate": 0.001}'::json,
     '["2"]'::json,
     '{"exchange": "binance", "order_type": "maker"}'::json,
@@ -139,7 +137,7 @@ INSERT INTO orders (
     status, side, type,
     amount, price, average, filled, remaining, cost,
     last_trade_timestamp, time_in_force, post_only, reduce_only,
-    trigger_price, stop_loss_price, take_profit_price,
+    trigger_price,
     fee_json, trades_json, info_json,
     deal_id
 ) VALUES (
@@ -147,7 +145,7 @@ INSERT INTO orders (
     'closed', 'buy', 'limit',
     0.02, 2500.0, 2500.0, 0.02, 0.0, 50.0,
     1734502860500, 'GTC', TRUE, FALSE,
-    NULL, NULL, NULL,
+    NULL,
     '{"currency": "USDT", "cost": 0.05, "rate": 0.001}'::json,
     '["3", "7", "8"]'::json,
     '{"exchange": "binance", "order_type": "maker"}'::json,
@@ -161,7 +159,7 @@ INSERT INTO orders (
     status, side, type,
     amount, price, average, filled, remaining, cost,
     last_trade_timestamp, time_in_force, post_only, reduce_only,
-    trigger_price, stop_loss_price, take_profit_price,
+    trigger_price,
     fee_json, trades_json, info_json,
     deal_id
 ) VALUES (
@@ -169,7 +167,7 @@ INSERT INTO orders (
     'open', 'buy', 'limit',
     0.5, 300.0, NULL, 0.0, 0.5, 0.0,
     NULL, 'GTC', TRUE, FALSE,
-    NULL, NULL, NULL,
+    NULL,
     NULL,
     '[]',
     '{"exchange": "binance", "order_type": "maker"}'::json,
@@ -183,7 +181,7 @@ INSERT INTO orders (
     status, side, type,
     amount, price, average, filled, remaining, cost,
     last_trade_timestamp, time_in_force, post_only, reduce_only,
-    trigger_price, stop_loss_price, take_profit_price,
+    trigger_price,
     fee_json, trades_json, info_json,
     deal_id
 ) VALUES (
@@ -191,7 +189,7 @@ INSERT INTO orders (
     'closed', 'buy', 'limit',
     1.0, 100.0, 100.0, 1.0, 0.0, 100.0,
     1734503460500, 'GTC', TRUE, FALSE,
-    NULL, NULL, NULL,
+    NULL,
     '{"currency": "USDT", "cost": 0.1, "rate": 0.001}'::json,
     '["4"]'::json,
     '{"exchange": "binance", "order_type": "maker"}'::json,
@@ -204,7 +202,7 @@ INSERT INTO orders (
     status, side, type,
     amount, price, average, filled, remaining, cost,
     last_trade_timestamp, time_in_force, post_only, reduce_only,
-    trigger_price, stop_loss_price, take_profit_price,
+    trigger_price,
     fee_json, trades_json, info_json,
     deal_id
 ) VALUES (
@@ -212,7 +210,7 @@ INSERT INTO orders (
     'open', 'sell', 'limit',
     1.0, 102.0, NULL, 0.0, 1.0, 0.0,
     NULL, 'GTC', TRUE, FALSE,
-    NULL, NULL, NULL,
+    NULL,
     NULL,
     '[]',
     '{"exchange": "binance", "order_type": "maker"}'::json,
@@ -226,7 +224,7 @@ INSERT INTO orders (
     status, side, type,
     amount, price, average, filled, remaining, cost,
     last_trade_timestamp, time_in_force, post_only, reduce_only,
-    trigger_price, stop_loss_price, take_profit_price,
+    trigger_price,
     fee_json, trades_json, info_json,
     deal_id
 ) VALUES (
@@ -234,7 +232,7 @@ INSERT INTO orders (
     'closed', 'buy', 'limit',
     0.0015, 44800.0, 44800.0, 0.0015, 0.0, 67.2,
     1734507060500, 'GTC', TRUE, FALSE,
-    NULL, NULL, NULL,
+    NULL,
     '{"currency": "USDT", "cost": 0.067, "rate": 0.001}'::json,
     '["5"]'::json,
     '{"exchange": "binance", "order_type": "maker"}'::json,
@@ -247,7 +245,7 @@ INSERT INTO orders (
     status, side, type,
     amount, price, average, filled, remaining, cost,
     last_trade_timestamp, time_in_force, post_only, reduce_only,
-    trigger_price, stop_loss_price, take_profit_price,
+    trigger_price,
     fee_json, trades_json, info_json,
     deal_id
 ) VALUES (
@@ -255,7 +253,7 @@ INSERT INTO orders (
     'closed', 'sell', 'limit',
     0.0015, 45344.0, 45344.0, 0.0015, 0.0, 68.016,
     1734510600500, 'GTC', TRUE, FALSE,
-    NULL, NULL, NULL,
+    NULL,
     '{"currency": "USDT", "cost": 0.068, "rate": 0.001}'::json,
     '["6"]'::json,
     '{"exchange": "binance", "order_type": "maker"}'::json,
@@ -268,7 +266,7 @@ INSERT INTO orders (
     status, side, type,
     amount, price, average, filled, remaining, cost,
     last_trade_timestamp, time_in_force, post_only, reduce_only,
-    trigger_price, stop_loss_price, take_profit_price,
+    trigger_price,
     fee_json, trades_json, info_json,
     deal_id
 ) VALUES (
@@ -276,7 +274,7 @@ INSERT INTO orders (
     'canceled', 'buy', 'limit',
     100.0, 0.60, NULL, 0.0, 100.0, 0.0,
     NULL, 'GTC', TRUE, FALSE,
-    NULL, NULL, NULL,
+    NULL,
     NULL,
     '[]',
     '{"exchange": "binance", "cancel_reason": "user_request"}'::json,

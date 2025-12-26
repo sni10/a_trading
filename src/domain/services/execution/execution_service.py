@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Dict, Any
 
 from src.domain.interfaces.logger import ILogger
+from src.domain.entities.currency_pair import CurrencyPair
 from src.domain.entities.deal import Deal
 from src.domain.entities.order import Order
 
@@ -37,6 +38,7 @@ def execute(
     amount = params.get("amount")
     budget = params.get("budget")
     target_sell_price = params.get("target_sell_price")
+    sell_amount = params.get("sell_amount")
     ts = decision.get("ts") or context.get("market", {}).get(symbol, {}).get("ts")
 
     if price is None:
@@ -60,6 +62,12 @@ def execute(
         return
 
     amount = float(amount)
+    sell_amount_value = amount
+    if sell_amount is not None:
+        try:
+            sell_amount_value = float(sell_amount)
+        except (TypeError, ValueError):
+            sell_amount_value = amount
     deal_id = _next_sequence(context, "deal_seq")
     buy_order_id = _next_sequence(context, "order_seq")
     sell_order_id = _next_sequence(context, "order_seq")
@@ -91,12 +99,15 @@ def execute(
         status="open",
         side="sell",
         type="limit",
-        amount=amount,
+        amount=sell_amount_value,
         price=float(sell_price),
         filled=0.0,
-        remaining=amount,
-        cost=round(float(sell_price) * amount, 8),
+        remaining=sell_amount_value,
+        cost=round(float(sell_price) * sell_amount_value, 8),
     )
+
+    pair = (context.get("pairs") or {}).get(symbol)
+    max_loss_amount = pair.max_loss_amount if isinstance(pair, CurrencyPair) else None
 
     deal = Deal(
         id=deal_id,
@@ -106,6 +117,7 @@ def execute(
         target_amount=amount,
         target_buy_price=price,
         target_sell_price=float(sell_price),
+        max_loss_amount=max_loss_amount,
         strategy_name=str(params.get("strategy") or "indicator_signal"),
         metadata={
             "reason": reason,

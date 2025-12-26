@@ -14,6 +14,7 @@ from src.application.use_cases.worker_manager import run_order_book_refresh_work
 from src.application.workers.persistence_worker import PersistenceWorker
 from src.config.config import AppConfig, load_config
 from src.domain.entities.currency_pair import CurrencyPair
+from src.domain.interfaces.currency_pair_repository import ICurrencyPairRepository
 from src.domain.services.context.state import init_context
 from src.domain.services.ticker.ticker_source import TickSource
 from src.infrastructure.connectors.ccxt_pro_exchange_connector import (
@@ -39,6 +40,25 @@ TICKER_LOG_INTERVAL = 10
 _LOG = __name__
 
 
+def _resolve_active_symbol(
+    symbol: str | None,
+    pair_repo: ICurrencyPairRepository,
+) -> str:
+    if symbol:
+        return symbol
+
+    active_pairs = list(pair_repo.list_active())
+    if not active_pairs:
+        raise RuntimeError("Нет активных пар в БД. Укажите символ в CLI.")
+    if len(active_pairs) > 1:
+        symbols = ", ".join(pair.symbol for pair in active_pairs)
+        raise RuntimeError(
+            "В БД несколько активных пар. Укажите символ в CLI: "
+            f"{symbols}"
+        )
+    return active_pairs[0].symbol
+
+
 async def run_realtime_from_exchange(symbol: str | None = None) -> None:
     """Боевой async‑сценарий real‑time торговли от реальной биржи.
 
@@ -49,18 +69,16 @@ async def run_realtime_from_exchange(symbol: str | None = None) -> None:
 
     setup_logging()
 
-    if not symbol:
-        raise RuntimeError("Symbol is required (expected like 'BTC/USDT')")
-
-    active_symbol = symbol
     cfg = load_config()
-
-    # === СТАРТОВЫЙ БЛОК (как в bad_example) ===
-    log_info(f"🚀 ЗАПУСК AlgoTrade Prototype v{__version__} для {active_symbol}", _LOG)
 
     # Репозитории (DB через SQLAlchemy)
     repos = build_repositories(cfg)
     pair_repo = repos.pair_repository
+
+    active_symbol = _resolve_active_symbol(symbol, pair_repo)
+
+    # === СТАРТОВЫЙ БЛОК (как в bad_example) ===
+    log_info(f"🚀 ЗАПУСК AlgoTrade Prototype v{__version__} для {active_symbol}", _LOG)
 
     # Bootstrap: если пары нет в БД — создаём с дефолтами.
     pair = pair_repo.get_by_symbol(active_symbol)
