@@ -18,7 +18,7 @@ from src.application.use_cases.run_realtime_trading import (
 )
 
 
-def _parse_cli_pair(argv: list[str]) -> str | None:
+def _parse_cli_pair(argv: list[str]) -> str:
     """Извлечь символ валютной пары из аргументов командной строки.
 
     Ожидается формат вызова::
@@ -30,7 +30,9 @@ def _parse_cli_pair(argv: list[str]) -> str | None:
     """
 
     if len(argv) < 2:
-        return None
+        raise SystemExit(
+            "Currency pair symbol is required. Usage: python main.py BTC/USDT"
+        )
 
     symbol = argv[1].strip().upper()
     if "/" not in symbol or symbol.count("/") != 1:
