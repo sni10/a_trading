@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Protocol
+from typing import Any, Protocol
 
 from src.domain.entities.order import Order
 
@@ -45,6 +45,40 @@ class IOrderSyncService(Protocol):
 
         Returns:
             Order | None - обновлённый ордер или None если не найден
+        """
+        ...
+
+    def apply_exchange_order_to_local(
+        self,
+        order: Order,
+        ccxt_response: dict[str, Any],
+        *,
+        symbol: str,
+        context: dict[str, Any],
+    ) -> None:
+        """Применить данные от биржи к локальному ордеру после создания.
+
+        Args:
+            order: Локальный объект ордера
+            ccxt_response: Сырой CCXT unified order dict от биржи
+            symbol: Торговая пара
+            context: Общий контекст приложения
+        """
+        ...
+
+    def apply_exchange_order(
+        self,
+        ccxt_response: dict[str, Any],
+        *,
+        symbol: str,
+        context: dict[str, Any],
+    ) -> None:
+        """Применить WebSocket-апдейт ордера из стрима к локальному состоянию.
+
+        Args:
+            ccxt_response: Сырой CCXT unified order dict из стрима
+            symbol: Торговая пара
+            context: Общий контекст приложения
         """
         ...
 

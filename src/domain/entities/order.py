@@ -4,6 +4,7 @@ Entity: Order (Ордер)
 Представляет ордер/заявку на бирже согласно CCXT Order Structure.
 Один ордер может иметь множество исполнений (Trade).
 """
+import warnings
 from dataclasses import dataclass, field
 from typing import Any
 from datetime import datetime
@@ -59,7 +60,7 @@ class Order:
     fee: OrderFee | None = None                # Комиссия за ордер
     trades: list[str] = field(default_factory=list)  # Список ID трейдов
 
-    # Оригинальный ответ биржи
+    # Оригинальный ответ биржи (deprecated — будет удалён в будущих версиях)
     info: dict[str, Any] = field(default_factory=dict)
 
     # Внутренние поля для связей
@@ -97,15 +98,83 @@ class Order:
         fee_cost = self.fee.cost if self.fee else 0.0
         return base_cost + fee_cost
 
+    def update_from_exchange(self, ccxt_response: dict[str, Any]) -> bool:
+        """Обогатить ордер данными от биржи — мутация на месте.
+
+        Применяет monotonic timestamp guard: если входящий timestamp
+        не новее текущего, обновление отклоняется (защита от stale data
+        при конкурентных WebSocket-апдейтах).
+
+        Args:
+            ccxt_response: Сырой CCXT unified order dict
+
+        Returns:
+            True если данные применены, False если отклонены как устаревшие
+        """
+        incoming_ts = int(ccxt_response.get("timestamp") or 0)
+        if self.timestamp and incoming_ts <= self.timestamp:
+            return False  # reject stale data
+
+        self.exchange_order_id = str(ccxt_response["id"])
+        self.status = ccxt_response["status"]
+        self.filled = float(ccxt_response.get("filled", 0.0))
+        self.remaining = float(ccxt_response.get("remaining", 0.0))
+        self.cost = float(ccxt_response.get("cost", 0.0))
+        self.average = (
+            float(ccxt_response["average"]) if ccxt_response.get("average") else None
+        )
+        self.timestamp = incoming_ts
+        self.datetime = ccxt_response.get("datetime", "")
+        self.last_trade_timestamp = (
+            int(ccxt_response["lastTradeTimestamp"])
+            if ccxt_response.get("lastTradeTimestamp")
+            else None
+        )
+        self.time_in_force = ccxt_response.get("timeInForce")
+        self.post_only = bool(ccxt_response.get("postOnly", False))
+        self.reduce_only = bool(ccxt_response.get("reduceOnly", False))
+        self.trigger_price = (
+            float(ccxt_response["triggerPrice"])
+            if ccxt_response.get("triggerPrice")
+            else None
+        )
+
+        # Комиссия
+        if ccxt_response.get("fee"):
+            fee_data = ccxt_response["fee"]
+            self.fee = OrderFee(
+                currency=fee_data.get("currency", ""),
+                cost=float(fee_data.get("cost", 0.0)),
+                rate=float(fee_data["rate"]) if fee_data.get("rate") else None,
+            )
+
+        # Трейды
+        if ccxt_response.get("trades"):
+            self.trades = [str(t.get("id", "")) for t in ccxt_response["trades"]]
+
+        # info deprecated, но пока сохраняем для обратной совместимости
+        self.info = ccxt_response.get("info", {})
+
+        return True
+
     @classmethod
     def from_ccxt(cls, ccxt_order: dict[str, Any], deal_id: int | None = None) -> "Order":
-        """
-        Создает Order из CCXT ответа биржи
+        """Создает Order из CCXT ответа биржи.
+
+        .. deprecated::
+            Используйте конструктор ``Order(...)`` + ``update_from_exchange()``.
+            Этот метод будет удалён в будущих версиях.
 
         Args:
             ccxt_order: Ответ от exchange.create_order() или exchange.fetch_order()
             deal_id: Опционально - ID сделки для связи
         """
+        warnings.warn(
+            "Order.from_ccxt() is deprecated. "
+            "Use Order(...) + order.update_from_exchange(ccxt_dict) instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         # Парсим комиссию
         fee = None
         if ccxt_order.get('fee'):

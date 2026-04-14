@@ -59,5 +59,49 @@ class IExchangeConnector(Protocol):
             }
         """
 
+    async def create_order(
+        self,
+        symbol: str,
+        order_type: str,
+        side: str,
+        amount: float,
+        price: float | None = None,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Разместить ордер на бирже.
+
+        Возвращает сырой CCXT-ответ (unified order structure) в виде dict.
+        Парсинг в доменную сущность выполняется на стороне домена.
+
+        Args:
+            symbol: Торговая пара, например ``"BTC/USDT"``
+            order_type: Тип ордера: ``"limit"`` или ``"market"``
+            side: Сторона: ``"buy"`` или ``"sell"``
+            amount: Объём в базовой валюте
+            price: Цена (обязательна для limit, None для market)
+            params: Дополнительные параметры биржи
+
+        Returns:
+            dict — сырой CCXT unified order dict
+        """
+        ...
+
+    async def stream_orders(self, symbol: str) -> AsyncIterator[dict[str, Any]]:
+        """Асинхронный поток обновлений ордеров (``watch_orders``).
+
+        Каждый элемент — сырой CCXT unified order dict с как минимум
+        полями ``id``, ``symbol``, ``status``, ``timestamp``.
+        """
+        ...
+
+    async def stream_my_trades(self, symbol: str) -> AsyncIterator[dict[str, Any]]:
+        """Асинхронный поток пользовательских трейдов (``watch_my_trades``).
+
+        Каждый элемент — сырой CCXT unified trade dict с как минимум
+        полями ``id``, ``order``, ``symbol``, ``side``, ``amount``,
+        ``price``, ``cost``, ``timestamp``.
+        """
+        ...
+
 
 __all__ = ["IExchangeConnector"]

@@ -9,6 +9,7 @@ from src.config.config import AppConfig
 from src.domain.entities.deal import Deal
 from src.domain.entities.order import Order
 from src.domain.interfaces.exchange_connector import IExchangeConnector
+from typing import Any
 from src.domain.services.order_sync_service import OrderSyncService
 from src.infrastructure.logging import log_stage
 
@@ -159,11 +160,12 @@ async def _create_exchange_order(
     connector: IExchangeConnector,
     order: Order | None,
     symbol: str,
-) -> Order | None:
+) -> dict[str, Any] | None:
+    """Разместить ордер на бирже, вернуть сырой CCXT dict или None при ошибке."""
     if order is None:
         return None
     try:
-        created = await connector.create_order(
+        return await connector.create_order(
             symbol=symbol,
             order_type=str(order.type or "limit"),
             side=str(order.side or "buy"),
@@ -171,7 +173,6 @@ async def _create_exchange_order(
             price=float(order.price) if order.price is not None else None,
             params={},
         )
-        return created
     except Exception as exc:  # pragma: no cover - защитный контур
         log_stage(
             "EXEC",

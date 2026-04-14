@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Callable
 
+from src.domain.entities.trade import Trade
 from src.domain.interfaces.exchange_connector import IExchangeConnector
 from src.domain.services.trades.trade_sync_service import TradeSyncService
 from src.infrastructure.logging import log_stage
@@ -23,7 +24,8 @@ async def trade_stream_worker(
 
     while True:
         try:
-            async for trade in connector.stream_my_trades(symbol):
+            async for raw_trade in connector.stream_my_trades(symbol):
+                trade = Trade.from_ccxt(raw_trade)
                 trade_sync.apply_trade(trade, symbol=symbol, context=context)
 
                 if is_stopped is not None and is_stopped():

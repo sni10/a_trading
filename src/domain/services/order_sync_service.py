@@ -143,6 +143,81 @@ class OrderSyncService:
             or local.average != exchange.average
         )
 
+    def apply_exchange_order_to_local(
+        self,
+        order: Order,
+        ccxt_response: dict,
+        *,
+        symbol: str,
+        context: dict,
+    ) -> None:
+        """Применить данные от биржи к локальному ордеру после создания/обновления.
+
+        Вызывается из ``order_execution_worker`` после успешного
+        ``connector.create_order()``. Мутирует существующий объект Order
+        на месте через ``update_from_exchange``, затем сохраняет в БД.
+
+        Args:
+            order: Локальный объект ордера (тот же, что в Deal)
+            ccxt_response: Сырой CCXT unified order dict от биржи
+            symbol: Торговая пара
+            context: Общий контекст приложения
+        """
+        applied = order.update_from_exchange(ccxt_response)
+        if applied:
+            self._order_repo.upsert(order)
+            if self._logger:
+                self._logger.log_stage(
+                    "ORDER_SYNC",
+                    f"Applied exchange data to order {order.exchange_order_id}",
+                )
+
+    def apply_exchange_order(
+        self,
+        ccxt_response: dict,
+        *,
+        symbol: str,
+        context: dict,
+    ) -> None:
+        """Применить WebSocket-апдейт ордера из стрима к локальному состоянию.
+
+        Вызывается из ``order_stream_worker``. Ищет существующий Order
+        в контексте по ``exchange_order_id`` и обновляет его через
+        ``update_from_exchange`` с timestamp guard.
+
+        Args:
+            ccxt_response: Сырой CCXT unified order dict из стрима
+            symbol: Торговая пара
+            context: Общий контекст приложения
+        """
+        exchange_order_id = str(ccxt_response.get("id", ""))
+        if not exchange_order_id:
+            return
+
+        orders_list = (context.get("orders") or {}).get(symbol) or []
+        order = None
+        for o in orders_list:
+            if o.exchange_order_id == exchange_order_id:
+                order = o
+                break
+
+        if order is None:
+            if self._logger:
+                self._logger.log_stage(
+                    "ORDER_SYNC",
+                    f"Stream order {exchange_order_id} not found locally, skipping",
+                )
+            return
+
+        applied = order.update_from_exchange(ccxt_response)
+        if applied:
+            self._order_repo.upsert(order)
+            if self._logger:
+                self._logger.log_stage(
+                    "ORDER_SYNC",
+                    f"Stream-updated order {exchange_order_id}: {order.status}",
+                )
+
     # =========================================================================
     # ЗАГЛУШКИ (TODO: Удалить после реализации IExchangeConnector методов)
     # =========================================================================

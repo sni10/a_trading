@@ -175,5 +175,39 @@ class CcxtProExchangeConnector(IExchangeConnector):
             "nonce": order_book.get("nonce"),
         }
 
+    async def create_order(
+        self,
+        symbol: str,
+        order_type: str,
+        side: str,
+        amount: float,
+        price: float | None = None,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Разместить ордер на бирже, вернуть сырой CCXT unified order dict."""
+        result = await self._exchange.create_order(
+            symbol=symbol,
+            type=order_type,
+            side=side,
+            amount=amount,
+            price=price,
+            params=params or {},
+        )
+        return dict(result)
+
+    async def stream_orders(self, symbol: str) -> AsyncIterator[dict[str, Any]]:
+        """Поток обновлений ордеров через ``watch_orders``."""
+        while True:
+            orders = await self._exchange.watch_orders(symbol)
+            for order in orders:
+                yield dict(order)
+
+    async def stream_my_trades(self, symbol: str) -> AsyncIterator[dict[str, Any]]:
+        """Поток пользовательских трейдов через ``watch_my_trades``."""
+        while True:
+            trades = await self._exchange.watch_my_trades(symbol)
+            for trade in trades:
+                yield dict(trade)
+
 
 __all__ = ["CcxtProExchangeConnector"]
