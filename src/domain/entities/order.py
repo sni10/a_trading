@@ -79,8 +79,20 @@ class Order:
         return self.status == 'canceled'
 
     def is_filled(self) -> bool:
-        """Ордер полностью исполнен"""
-        return self.filled >= self.amount
+        """Ордер полностью исполнен.
+
+        Учитывает dust-tolerance: биржа может исполнить чуть меньше
+        запрошенного объёма из-за округления (например, 0.0107 вместо
+        0.01073). Если разница меньше 0.1% — считаем исполненным.
+        Также считаем исполненным, если биржа вернула status=closed.
+        """
+        if self.status == "closed":
+            return True
+        if self.amount == 0:
+            return False
+        # Dust tolerance: разница менее 0.1% от amount
+        tolerance = self.amount * 0.001
+        return self.filled >= (self.amount - tolerance)
 
     def is_partially_filled(self) -> bool:
         """Ордер частично исполнен"""

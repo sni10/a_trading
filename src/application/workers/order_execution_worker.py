@@ -164,7 +164,9 @@ def _can_place_sell(
     sell_order = deal.sell_order
     if buy_order is None or sell_order is None:
         return False
-    if not buy_order.is_filled():
+    # Проверяем исполнение BUY: либо filled >= amount, либо биржа сообщила
+    # status=closed (бывает при округлении dust — filled чуть меньше amount).
+    if not buy_order.is_filled() and not buy_order.is_closed():
         return False
     return _can_place_order(sell_order, execution_state, now_ts, retry_sec)
 
