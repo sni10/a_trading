@@ -86,6 +86,22 @@ class IExchangeConnector(Protocol):
         """
         ...
 
+    async def cancel_order(
+        self,
+        order_id: str,
+        symbol: str,
+    ) -> dict[str, Any]:
+        """Отменить ордер на бирже.
+
+        Args:
+            order_id: ID ордера на бирже (exchange_order_id)
+            symbol: Торговая пара
+
+        Returns:
+            dict — сырой CCXT unified order dict с обновлённым статусом
+        """
+        ...
+
     async def fetch_open_orders(self, symbol: str) -> list[dict[str, Any]]:
         """Получить список открытых ордеров с биржи (HTTP).
 

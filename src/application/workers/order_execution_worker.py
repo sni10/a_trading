@@ -36,6 +36,12 @@ async def order_execution_worker(
     )
 
     while True:
+        await _cancel_pending_exchange_orders(
+            connector,
+            context,
+            symbol=symbol,
+        )
+
         await _place_pending_orders(
             connector,
             order_sync,
@@ -49,6 +55,40 @@ async def order_execution_worker(
             break
 
         await asyncio.sleep(interval)
+
+
+async def _cancel_pending_exchange_orders(
+    connector: IExchangeConnector,
+    context: dict,
+    *,
+    symbol: str,
+) -> None:
+    """Отменить на бирже ордера, которые timeout-сервис пометил для отмены."""
+    cancel_queue: list[str] = (
+        (context.get("pending_exchange_cancels") or {}).get(symbol) or []
+    )
+    if not cancel_queue:
+        return
+
+    # Забираем все ID из очереди (атомарно — GIL)
+    ids_to_cancel = list(cancel_queue)
+    cancel_queue.clear()
+
+    for exchange_order_id in ids_to_cancel:
+        try:
+            await connector.cancel_order(exchange_order_id, symbol)
+            log_stage(
+                "EXEC",
+                f"Ордер {exchange_order_id} отменён на бирже",
+                symbol=symbol,
+            )
+        except Exception as exc:  # pragma: no cover
+            log_stage(
+                "EXEC",
+                f"Ошибка отмены ордера {exchange_order_id} на бирже: "
+                f"{type(exc).__name__}: {exc}",
+                symbol=symbol,
+            )
 
 
 async def _place_pending_orders(

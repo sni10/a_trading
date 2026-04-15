@@ -61,16 +61,32 @@ class TickPipelineService:
 
         # ORDER TIMEOUT: отмена протухших BUY-ордеров.
         timeout_sec = self._cfg.buy_order_timeout_sec
+        pending_send_timeout_sec = self._cfg.buy_order_pending_send_timeout_sec
         timeout_result = cancel_stale_buy_orders(
             context,
             symbol=symbol,
             now_ts=ts,
             timeout_sec=timeout_sec,
+            pending_send_timeout_sec=pending_send_timeout_sec,
         )
         if timeout_result.canceled_orders:
             log_info(
                 f"🕒 [ORDER_TIMEOUT] Отменено BUY/SELL: {timeout_result.canceled_orders} | "
                 f"сделок: {timeout_result.canceled_deals}",
+                _LOG,
+            )
+        # Если есть ордера на бирже, которые нужно отменить — складываем
+        # их ID в очередь для async-воркера (order_execution_worker).
+        if timeout_result.exchange_order_ids_to_cancel:
+            cancel_queue = (
+                context
+                .setdefault("pending_exchange_cancels", {})
+                .setdefault(symbol, [])
+            )
+            cancel_queue.extend(timeout_result.exchange_order_ids_to_cancel)
+            log_info(
+                f"🕒 [ORDER_TIMEOUT] В очередь на отмену на бирже: "
+                f"{timeout_result.exchange_order_ids_to_cancel}",
                 _LOG,
             )
 

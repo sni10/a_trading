@@ -200,6 +200,15 @@ class CcxtProExchangeConnector(IExchangeConnector):
         )
         return dict(result)
 
+    async def cancel_order(
+        self,
+        order_id: str,
+        symbol: str,
+    ) -> dict[str, Any]:
+        """Отменить ордер на бирже, вернуть сырой CCXT unified order dict."""
+        result = await self._exchange.cancel_order(order_id, symbol)
+        return dict(result)
+
     async def fetch_open_orders(self, symbol: str) -> list[dict[str, Any]]:
         """Получить открытые ордера через HTTP ``fetch_open_orders``."""
         orders = await self._exchange.fetch_open_orders(symbol)
