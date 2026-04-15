@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from src.domain.entities.order import Order
@@ -36,20 +36,28 @@ class OrderSyncService:
         self._exchange = exchange
         self._logger = logger
 
-    def sync_orders_with_exchange(self, symbol: str) -> list[Order]:
+    async def sync_orders_with_exchange(
+        self,
+        symbol: str,
+        *,
+        context: dict[str, Any] | None = None,
+        buy_timeout_sec: float = 30.0,
+    ) -> list[Order]:
         """Синхронизировать ордера с биржей.
 
         Алгоритм:
         1. Загрузить открытые ордера с биржи (fetch_open_orders)
-        2. Загрузить локальные открытые ордера из БД
+        2. Загрузить локальные открытые ордера из контекста
         3. Сравнить состояния:
-           - Если ордер закрылся на бирже -> обновить в БД
+           - Если ордер закрылся на бирже -> обновить локально и в БД
            - Если ордер частично исполнен -> обновить filled/remaining
            - Если ордер отменён -> пометить canceled
         4. Вернуть актуальный список
 
         Args:
             symbol: Символ валютной пары
+            context: Общий контекст приложения
+            buy_timeout_sec: Таймаут BUY-ордера (не используется пока)
 
         Returns:
             List[Order] - актуальные открытые ордера после синхронизации
@@ -57,48 +65,59 @@ class OrderSyncService:
         if self._logger:
             self._logger.log_stage("ORDER_SYNC", f"Syncing orders for {symbol}")
 
-        # ЗАГЛУШКА: Загрузить открытые ордера с биржи
-        # TODO: Реализовать после готовности IExchangeConnector.fetch_open_orders()
-        exchange_orders = self._fetch_open_orders_stub(symbol)
+        # Загрузить открытые ордера с биржи
+        raw_exchange_orders = await self._exchange.fetch_open_orders(symbol)
 
-        # Загрузить локальные ордера из БД
-        local_orders = self._order_repo.list_by_symbol(symbol, limit=100)
+        # Построить индекс биржевых ордеров по exchange_order_id
+        exchange_orders_map: dict[str, dict[str, Any]] = {}
+        for raw in raw_exchange_orders:
+            eid = str(raw.get("id", ""))
+            if eid:
+                exchange_orders_map[eid] = raw
 
-        # Создать индекс биржевых ордеров для быстрого поиска
-        exchange_orders_map = {order.id: order for order in exchange_orders}
+        # Локальные ордера из контекста (in-memory — актуальнее БД)
+        orders_list: list[Order] = []
+        if context is not None:
+            orders_list = (context.get("orders") or {}).get(symbol) or []
+        else:
+            orders_list = self._order_repo.list_by_symbol(symbol, limit=100)
 
-        # Сравнить и обновить
-        synced_orders = []
-        for local_order in local_orders:
-            if local_order.status not in ["open", "closed"]:
-                continue  # Пропускаем canceled/expired
+        synced_orders: list[Order] = []
+        for local_order in orders_list:
+            if local_order.status not in ("open", "closed"):
+                continue
 
-            exchange_order = exchange_orders_map.get(local_order.id)
+            if not local_order.exchange_order_id:
+                # Ещё не размещён на бирже — пропускаем
+                synced_orders.append(local_order)
+                continue
 
-            if exchange_order is None:
-                # Ордер не найден на бирже - возможно закрыт или отменён
+            raw = exchange_orders_map.get(local_order.exchange_order_id)
+
+            if raw is None:
+                # Ордер не найден среди открытых — мог закрыться / отмениться
                 if local_order.status == "open":
                     if self._logger:
                         self._logger.log_stage(
                             "ORDER_SYNC",
-                            f"Order {local_order.id} not found on exchange, fetching details",
+                            f"Order {local_order.exchange_order_id} not in open orders, fetching details",
                         )
-                    # Попытаться получить детали
-                    updated = self.fetch_and_update_order(local_order.id)
+                    updated = await self.fetch_and_update_order(
+                        local_order.exchange_order_id, symbol, local_order
+                    )
                     if updated:
                         synced_orders.append(updated)
             else:
-                # Ордер найден - проверить изменения
-                if self._has_order_changed(local_order, exchange_order):
+                # Ордер найден — применить обновления
+                applied = local_order.update_from_exchange(raw)
+                if applied:
+                    self._order_repo.upsert(local_order)
                     if self._logger:
                         self._logger.log_stage(
                             "ORDER_SYNC",
-                            f"Updating order {local_order.id}: {local_order.status} -> {exchange_order.status}",
+                            f"Updated order {local_order.exchange_order_id}: {local_order.status}",
                         )
-                    self._order_repo.upsert(exchange_order)
-                    synced_orders.append(exchange_order)
-                else:
-                    synced_orders.append(local_order)
+                synced_orders.append(local_order)
 
         if self._logger:
             self._logger.log_stage(
@@ -107,22 +126,40 @@ class OrderSyncService:
 
         return synced_orders
 
-    def fetch_and_update_order(self, order_id: str) -> Order | None:
-        """Получить актуальное состояние ордера с биржи.
+    async def fetch_and_update_order(
+        self,
+        exchange_order_id: str,
+        symbol: str,
+        local_order: Order | None = None,
+    ) -> Order | None:
+        """Получить актуальное состояние ордера с биржи и обновить локальный.
 
         Args:
-            order_id: ID ордера на бирже
+            exchange_order_id: ID ордера на бирже
+            symbol: Торговая пара
+            local_order: Локальный объект ордера (если есть)
 
         Returns:
             Order | None - обновлённый ордер или None если не найден
         """
-        # ЗАГЛУШКА: Получить ордер с биржи
-        # TODO: Реализовать после готовности IExchangeConnector.fetch_order()
-        exchange_order = self._fetch_order_stub(order_id)
+        try:
+            raw = await self._exchange.fetch_order(exchange_order_id, symbol)
+        except Exception as exc:
+            if self._logger:
+                self._logger.log_stage(
+                    "ORDER_SYNC",
+                    f"Failed to fetch order {exchange_order_id}: {type(exc).__name__}: {exc}",
+                )
+            return None
 
-        if exchange_order:
-            self._order_repo.upsert(exchange_order)
-            return exchange_order
+        if not raw:
+            return None
+
+        if local_order is not None:
+            applied = local_order.update_from_exchange(raw)
+            if applied:
+                self._order_repo.upsert(local_order)
+            return local_order
 
         return None
 
@@ -217,30 +254,6 @@ class OrderSyncService:
                     "ORDER_SYNC",
                     f"Stream-updated order {exchange_order_id}: {order.status}",
                 )
-
-    # =========================================================================
-    # ЗАГЛУШКИ (TODO: Удалить после реализации IExchangeConnector методов)
-    # =========================================================================
-
-    def _fetch_open_orders_stub(self, symbol: str) -> list[Order]:
-        """ЗАГЛУШКА: Получить открытые ордера с биржи.
-
-        TODO: Заменить на self._exchange.fetch_open_orders(symbol)
-        """
-        if self._logger:
-            self._logger.log_stage("ORDER_SYNC", f"[STUB] Fetching open orders for {symbol}")
-        # Возвращаем пустой список (заглушка)
-        return []
-
-    def _fetch_order_stub(self, order_id: str) -> Order | None:
-        """ЗАГЛУШКА: Получить конкретный ордер с биржи.
-
-        TODO: Заменить на self._exchange.fetch_order(order_id)
-        """
-        if self._logger:
-            self._logger.log_stage("ORDER_SYNC", f"[STUB] Fetching order {order_id}")
-        # Возвращаем None (заглушка)
-        return None
 
 
 __all__ = ["OrderSyncService"]

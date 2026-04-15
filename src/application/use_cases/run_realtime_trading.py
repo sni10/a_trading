@@ -11,11 +11,17 @@ from src.application.repository_factory import build_repositories
 from src.application.use_cases.run_offline_demo import run_demo_offline
 from src.application.use_cases.trading_loop import run_realtime_core
 from src.application.use_cases.worker_manager import run_order_book_refresh_worker
+from src.application.workers.order_execution_worker import order_execution_worker
+from src.application.workers.order_stream_worker import order_stream_worker
+from src.application.workers.order_sync_worker import order_sync_worker
 from src.application.workers.persistence_worker import PersistenceWorker
+from src.application.workers.trade_stream_worker import trade_stream_worker
 from src.config.config import AppConfig, load_config
 from src.domain.entities.currency_pair import CurrencyPair
 from src.domain.interfaces.currency_pair_repository import ICurrencyPairRepository
 from src.domain.services.context.state import init_context
+from src.domain.services.order_sync_service import OrderSyncService
+from src.domain.services.trades.trade_sync_service import TradeSyncService
 from src.domain.services.ticker.ticker_source import TickSource
 from src.infrastructure.connectors.ccxt_pro_exchange_connector import (
     CcxtProExchangeConnector,
@@ -142,6 +148,18 @@ async def run_realtime_from_exchange(symbol: str | None = None) -> None:
     mode_str = "Sandbox" if cfg.sandbox_mode else "Production"
     log_info(f"✅ Коннектор инициализирован ({cfg.exchange_id}, {mode_str})", _LOG)
 
+    # --- Доменные сервисы для ордеров и трейдов ---
+    order_sync_svc = OrderSyncService(
+        order_repo=repos.order_repository,
+        exchange=connector,
+    )
+    trade_sync_svc = TradeSyncService(
+        trade_repo=repos.trade_repository,
+        order_repo=repos.order_repository,
+        deal_repo=repos.deal_repository,
+    )
+    log_info("✅ Сервисы синхронизации ордеров и трейдов созданы", _LOG)
+
     # Воркер стакана
     orderbook_task = asyncio.create_task(
         run_order_book_refresh_worker(connector, context, cfg, symbol=active_symbol)
@@ -154,6 +172,48 @@ async def run_realtime_from_exchange(symbol: str | None = None) -> None:
     )
     await persistence_worker.start()
     log_info("✅ Воркер персистентности запущен (интервал: 180 сек)", _LOG)
+
+    # --- Воркеры исполнения ордеров и стримов ---
+    execution_task = asyncio.create_task(
+        order_execution_worker(
+            connector,
+            order_sync_svc,
+            context,
+            cfg,
+            symbol=active_symbol,
+        )
+    )
+    log_info("✅ Воркер исполнения ордеров запущен", _LOG)
+
+    order_stream_task = asyncio.create_task(
+        order_stream_worker(
+            connector,
+            order_sync_svc,
+            context,
+            symbol=active_symbol,
+        )
+    )
+    log_info("✅ Воркер стрима ордеров запущен", _LOG)
+
+    trade_stream_task = asyncio.create_task(
+        trade_stream_worker(
+            connector,
+            trade_sync_svc,
+            context,
+            symbol=active_symbol,
+        )
+    )
+    log_info("✅ Воркер стрима трейдов запущен", _LOG)
+
+    order_sync_task = asyncio.create_task(
+        order_sync_worker(
+            order_sync_svc,
+            context,
+            cfg,
+            symbol=active_symbol,
+        )
+    )
+    log_info("✅ Воркер синхронизации ордеров запущен", _LOG)
 
     pipeline = TickPipelineService(cfg)
     log_info("✅ Конвейер обработки тиков создан (TickPipelineService)", _LOG)
@@ -190,13 +250,20 @@ async def run_realtime_from_exchange(symbol: str | None = None) -> None:
         await persistence_worker.stop()
         log_info("✅ Воркер персистентности остановлен, финальный сброс в БД выполнен", _LOG)
 
-        # Остановить воркер стакана
-        orderbook_task.cancel()
-        try:
-            await orderbook_task
-        except asyncio.CancelledError:
-            pass
-        log_info("✅ Воркер стакана остановлен", _LOG)
+        # Остановить все воркеры ордеров/трейдов
+        for task, name in [
+            (orderbook_task, "стакана"),
+            (execution_task, "исполнения ордеров"),
+            (order_stream_task, "стрима ордеров"),
+            (trade_stream_task, "стрима трейдов"),
+            (order_sync_task, "синхронизации ордеров"),
+        ]:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            log_info(f"✅ Воркер {name} остановлен", _LOG)
 
         await connector.close()
         log_info("🛑 Коннектор закрыт, система остановлена", _LOG)

@@ -110,6 +110,17 @@ class Trade:
                     rate=float(fee_data['rate']) if fee_data.get('rate') else None
                 ))
 
+        # Сохраняем exchange_order_id из CCXT unified trade (поле "order")
+        # в info, чтобы TradeSyncService мог связать трейд с ордером.
+        info = ccxt_trade.get('info', {})
+        if isinstance(info, dict):
+            info = dict(info)  # копия, чтобы не мутировать оригинал
+        else:
+            info = {}
+        exchange_order_id = ccxt_trade.get('order')
+        if exchange_order_id:
+            info['_exchange_order_id'] = str(exchange_order_id)
+
         return cls(
             id=None,  # Autoincrement в БД
             exchange_trade_id=str(ccxt_trade['id']),  # ID от биржи
@@ -125,7 +136,7 @@ class Trade:
             type=ccxt_trade.get('type'),
             fee=fee,
             fees=fees_list,
-            info=ccxt_trade.get('info', {})
+            info=info,
         )
 
     @classmethod

@@ -99,7 +99,12 @@ class CcxtProExchangeConnector(IExchangeConnector):
         api_secret = getattr(config, "exchange_api_secret", None)
         if api_key and api_secret:
             params["apiKey"] = api_key
-            params["secret"] = api_secret
+            if "BEGIN PRIVATE KEY" in api_secret:
+                # Ed25519 PEM — передаём как privateKey для CCXT
+                params["secret"] = api_secret
+                params["privateKey"] = api_secret
+            else:
+                params["secret"] = api_secret
 
         self._exchange = exchange_cls(params)
 
@@ -144,17 +149,17 @@ class CcxtProExchangeConnector(IExchangeConnector):
             # Приведение к минимальному контракту CCXT‑тикера.
             yield {
                 "symbol": str(raw.get("symbol", symbol)),
-                "timestamp": int(raw["timestamp"]),
-                "datetime": str(raw["datetime"]),
-                "last": float(raw["last"]),
-                "open": float(raw["open"]),
-                "high": float(raw["high"]),
-                "low": float(raw["low"]),
-                "close": float(raw["close"]),
-                "bid": float(raw["bid"]),
-                "ask": float(raw["ask"]),
-                "baseVolume": float(raw["baseVolume"]),
-                "quoteVolume": float(raw["quoteVolume"]),
+                "timestamp": int(raw.get("timestamp") or 0),
+                "datetime": str(raw.get("datetime") or ""),
+                "last": float(raw.get("last") or 0),
+                "open": float(raw.get("open") or 0),
+                "high": float(raw.get("high") or 0),
+                "low": float(raw.get("low") or 0),
+                "close": float(raw.get("close") or 0),
+                "bid": float(raw.get("bid") or 0),
+                "ask": float(raw.get("ask") or 0),
+                "baseVolume": float(raw.get("baseVolume") or 0),
+                "quoteVolume": float(raw.get("quoteVolume") or 0),
             }
 
     async def fetch_order_book(self, symbol: str) -> dict:
@@ -194,6 +199,16 @@ class CcxtProExchangeConnector(IExchangeConnector):
             params=params or {},
         )
         return dict(result)
+
+    async def fetch_open_orders(self, symbol: str) -> list[dict[str, Any]]:
+        """Получить открытые ордера через HTTP ``fetch_open_orders``."""
+        orders = await self._exchange.fetch_open_orders(symbol)
+        return [dict(o) for o in orders]
+
+    async def fetch_order(self, order_id: str, symbol: str) -> dict[str, Any]:
+        """Получить конкретный ордер через HTTP ``fetch_order``."""
+        order = await self._exchange.fetch_order(order_id, symbol)
+        return dict(order)
 
     async def stream_orders(self, symbol: str) -> AsyncIterator[dict[str, Any]]:
         """Поток обновлений ордеров через ``watch_orders``."""

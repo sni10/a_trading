@@ -86,6 +86,25 @@ class IExchangeConnector(Protocol):
         """
         ...
 
+    async def fetch_open_orders(self, symbol: str) -> list[dict[str, Any]]:
+        """Получить список открытых ордеров с биржи (HTTP).
+
+        Возвращает список сырых CCXT unified order dict'ов.
+        """
+        ...
+
+    async def fetch_order(self, order_id: str, symbol: str) -> dict[str, Any]:
+        """Получить конкретный ордер с биржи по ID (HTTP).
+
+        Args:
+            order_id: ID ордера на бирже (exchange_order_id)
+            symbol: Торговая пара
+
+        Returns:
+            dict — сырой CCXT unified order dict
+        """
+        ...
+
     async def stream_orders(self, symbol: str) -> AsyncIterator[dict[str, Any]]:
         """Асинхронный поток обновлений ордеров (``watch_orders``).
 

@@ -112,8 +112,8 @@ class Order:
             True если данные применены, False если отклонены как устаревшие
         """
         incoming_ts = int(ccxt_response.get("timestamp") or 0)
-        if self.timestamp and incoming_ts <= self.timestamp:
-            return False  # reject stale data
+        if self.timestamp and incoming_ts < self.timestamp:
+            return False  # reject stale data (equal ts is OK — response to our request)
 
         self.exchange_order_id = str(ccxt_response["id"])
         self.status = ccxt_response["status"]

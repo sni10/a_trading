@@ -66,14 +66,14 @@ class TestUpdateFromExchange:
         assert order.timestamp == 2000  # не изменился
         assert order.exchange_order_id is None  # не обновился
 
-    def test_rejects_equal_timestamp(self) -> None:
-        """Timestamp guard: обновление с тем же timestamp тоже отклоняется."""
+    def test_accepts_equal_timestamp(self) -> None:
+        """Timestamp guard: равный timestamp принимается (ответ биржи на наш запрос)."""
         order = Order(symbol="BTC/USDT", side="buy", type="limit", amount=0.5, timestamp=1000)
         resp = _make_ccxt_response(timestamp=1000)
 
         result = order.update_from_exchange(resp)
 
-        assert result is False
+        assert result is True
 
     def test_accepts_newer_timestamp(self) -> None:
         """Более новый timestamp принимается."""
