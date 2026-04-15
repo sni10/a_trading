@@ -50,8 +50,11 @@ else
         if [ -f "$sql_file" ]; then
             filename=$(basename "$sql_file")
             echo "   ▶ Применяю ${filename}..."
-            psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
-                -f "$sql_file" --quiet --no-psqlrc 2>&1 | head -5
+            if ! psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
+                -v ON_ERROR_STOP=1 -f "$sql_file" --quiet --no-psqlrc 2>&1; then
+                echo "   ❌ Ошибка при применении ${filename}"
+                exit 1
+            fi
             echo "   ✅ ${filename} применена"
         fi
     done

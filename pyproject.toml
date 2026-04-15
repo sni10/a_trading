@@ -19,6 +19,8 @@ dependencies = [
     "pywin32>=311; sys_platform == 'win32'",
     "cryptography>=46.0.3",
     "python-dotenv>=1.2.1",
+    "SQLAlchemy>=2.0.36",
+    "psycopg2-binary>=2.9.0",
 ]
 
 [build-system]

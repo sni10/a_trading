@@ -27,14 +27,22 @@ RUN apt-get update && apt-get install -y \
     cd .. && \
     rm -rf ta-lib-0.6.4 ta-lib-0.6.4-src.tar.gz
 
-# 🔧 Установка Python-зависимостей
-COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements.txt
+# 🐍 Установка Poetry
+ENV POETRY_VERSION=2.1.3 \
+    POETRY_HOME="/opt/poetry" \
+    POETRY_NO_INTERACTION=1 \
+    POETRY_VIRTUALENVS_CREATE=false
+RUN curl -sSL https://install.python-poetry.org | python3 - \
+    && ln -s /opt/poetry/bin/poetry /usr/local/bin/poetry
+
+# 📁 Копируем файлы зависимостей и устанавливаем
+WORKDIR /app
+COPY pyproject.toml poetry.lock* ./
+RUN poetry install --no-root --no-directory
 
 # 📁 Копируем весь проект в контейнер
 COPY . /app
-WORKDIR /app
+RUN poetry install --no-root
 
 # 🚀 Entrypoint: автоматические миграции при старте
 COPY docker-entrypoint.sh /docker-entrypoint.sh
