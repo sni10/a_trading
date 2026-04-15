@@ -21,6 +21,9 @@ def execute(
 
     Реальных вызовов к бирже тут нет — это безопасная симуляция, которая
     готовит структуры для дальнейшего исполнения через коннектор.
+
+    ID сущностей (``id``) при создании равны ``None``.
+    Реальный PK назначает БД при первом сохранении через репозиторий.
     """
 
     action = decision.get("action")
@@ -68,15 +71,12 @@ def execute(
             sell_amount_value = float(sell_amount)
         except (TypeError, ValueError):
             sell_amount_value = amount
-    deal_id = _next_sequence(context, "deal_seq")
-    buy_order_id = _next_sequence(context, "order_seq")
-    sell_order_id = _next_sequence(context, "order_seq")
 
     timestamp = int(ts) if ts is not None else int(datetime.now().timestamp() * 1000)
     iso_time = datetime.utcfromtimestamp(timestamp / 1000).isoformat() + "Z"
 
     buy_order = Order(
-        id=buy_order_id,
+        id=None,  # DB назначит при persist
         symbol=symbol,
         timestamp=timestamp,
         datetime=iso_time,
@@ -92,7 +92,7 @@ def execute(
 
     sell_price = target_sell_price if target_sell_price is not None else price
     sell_order = Order(
-        id=sell_order_id,
+        id=None,  # DB назначит при persist
         symbol=symbol,
         timestamp=timestamp,
         datetime=iso_time,
@@ -110,7 +110,7 @@ def execute(
     max_loss_amount = pair.max_loss_amount if isinstance(pair, CurrencyPair) else None
 
     deal = Deal(
-        id=deal_id,
+        id=None,  # DB назначит при persist
         symbol=symbol,
         status=Deal.STATUS_PENDING,
         created_at=timestamp,
@@ -139,14 +139,6 @@ def execute(
     if logger:
         logger.log_info(
             f"⚙️ [EXEC] BUY создан | ticker_id: {ticker_id} | symbol: {symbol} | "
-            f"deal_id: {deal_id} | buy_order: {buy_order_id} | sell_order: {sell_order_id}"
+            f"deal (pending DB id) | buy_order + sell_order созданы"
         )
-
-
-def _next_sequence(context: Dict[str, Any], key: str) -> int:
-    counters = context.setdefault("metrics", {})
-    value = int(counters.get(key, 0)) + 1
-    counters[key] = value
-    context["metrics"] = counters
-    return value
 

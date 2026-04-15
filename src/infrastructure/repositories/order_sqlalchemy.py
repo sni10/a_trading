@@ -82,29 +82,35 @@ class SqlAlchemyOrderRepository(IOrderRepository):
     def upsert(self, order: Order) -> None:
         model = _entity_to_model(order)
         with self._sf.session_scope() as session:
-            # Если есть id - update существующего, иначе ищем по exchange_order_id
-            if model.id:
-                existing = session.get(OrderModel, model.id)
-                if existing:
-                    # Update существующего
-                    for key, value in model.__dict__.items():
-                        if not key.startswith('_'):
-                            setattr(existing, key, value)
-                    return
-            elif model.exchange_order_id:
-                # Ищем по exchange_order_id
-                from sqlalchemy import select
-                stmt = select(OrderModel).where(OrderModel.exchange_order_id == model.exchange_order_id)
-                existing = session.scalars(stmt).first()
-                if existing:
-                    # Update существующего
-                    for key, value in model.__dict__.items():
-                        if not key.startswith('_') and key != 'id':
-                            setattr(existing, key, value)
-                    return
+            existing = None
 
-            # Новая запись
-            session.add(model)
+            # 1. Поиск по DB PK (если уже сохранялся)
+            if order.id is not None:
+                existing = session.get(OrderModel, order.id)
+
+            # 2. Поиск по exchange_order_id (natural key от биржи)
+            if existing is None and order.exchange_order_id:
+                stmt = select(OrderModel).where(
+                    OrderModel.exchange_order_id == order.exchange_order_id
+                )
+                existing = session.scalars(stmt).first()
+
+            if existing:
+                # Update существующей записи
+                for key, value in model.__dict__.items():
+                    if not key.startswith('_') and key != 'id':
+                        setattr(existing, key, value)
+                # Синхронизировать DB PK → in-memory entity
+                order.id = existing.id
+                return
+
+            # INSERT новой записи (без явного id — БД назначит)
+            new_model = _entity_to_model(order)
+            new_model.id = None  # Гарантируем что DB назначит autoincrement
+            session.add(new_model)
+            session.flush()
+            # Синхронизировать DB PK → in-memory entity
+            order.id = new_model.id
 
     def get_by_id(self, order_id: int) -> Order | None:
         with self._sf.session_scope() as session:

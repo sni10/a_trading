@@ -62,7 +62,7 @@ def cancel_stale_buy_orders(
 
     timeout_ms = int(timeout_sec * 1000)
     pending_timeout_ms = int(pending_send_timeout_sec * 1000)
-    canceled_order_ids: set[int] = set()
+    canceled_order_ids: set[int] = set()  # id(order) — Python object identity
     canceled_deal_ids: set[int] = set()
     exchange_ids_to_cancel: list[str] = []
 
@@ -94,6 +94,7 @@ def cancel_stale_buy_orders(
             orders_by_id=orders_by_id,
             canceled_order_ids=canceled_order_ids,
             canceled_deal_ids=canceled_deal_ids,
+            all_deals=deals,
         )
 
     return BuyOrderTimeoutResult(
@@ -133,12 +134,21 @@ def _cancel_linked_entities(
     orders_by_id: Dict[int, Order],
     canceled_order_ids: set[int],
     canceled_deal_ids: set[int],
+    all_deals: list[Deal] | None = None,
 ) -> None:
+    # Найти deal: сначала по deal_id (если есть DB ID), потом по object reference
+    deal: Deal | None = None
     deal_id = getattr(order, "deal_id", None)
-    if deal_id is None:
-        return
+    if deal_id is not None:
+        deal = deal_map.get(int(deal_id))
 
-    deal = deal_map.get(int(deal_id))
+    if deal is None and all_deals:
+        # Fallback: найти deal по ссылке на ордер
+        for d in all_deals:
+            if d.buy_order is order or d.sell_order is order:
+                deal = d
+                break
+
     if not deal:
         return
 
@@ -156,7 +166,7 @@ def _cancel_linked_entities(
     if deal.status != Deal.STATUS_CANCELED:
         deal.mark_as_canceled()
         deal.metadata.setdefault("cancel_reason", "buy_order_timeout")
-    canceled_deal_ids.add(deal.id)
+    canceled_deal_ids.add(id(deal))
 
 
 def _cancel_order_mirror(
@@ -188,8 +198,7 @@ def _cancel_order(
         order.remaining = max(0.0, amount - filled)
     except (TypeError, ValueError):
         pass
-    if order.id is not None:
-        canceled_order_ids.add(int(order.id))
+    canceled_order_ids.add(id(order))
 
 
 __all__ = ["BuyOrderTimeoutResult", "cancel_stale_buy_orders"]

@@ -189,11 +189,14 @@ def _mark_attempt(execution_state: dict, order: Order | None, now_ts: int) -> No
 
 
 def _order_key(order: Order) -> str:
-    if order.id is not None:
-        return f"local:{order.id}"
-    if order.exchange_order_id:
-        return f"exchange:{order.exchange_order_id}"
-    return f"tmp:{id(order)}"
+    """Стабильный ключ для трекинга retry-попыток.
+
+    Используем ``id(order)`` — ссылку на Python-объект.
+    Объект Order живёт в context["orders"] на всём протяжении
+    жизни сделки, поэтому ключ стабилен даже при смене
+    ``order.id`` (None → DB PK) или ``exchange_order_id``.
+    """
+    return f"obj:{id(order)}"
 
 
 async def _create_exchange_order(
