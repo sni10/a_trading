@@ -44,6 +44,8 @@ RUN poetry install --no-root --no-directory
 COPY . /app
 RUN poetry install --no-root
 
+ENV PYTHONPATH=/app
+
 # 🚀 Entrypoint: автоматические миграции при старте
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
