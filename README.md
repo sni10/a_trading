@@ -16,6 +16,7 @@
 - [✨ Features and Limitations](#-features-and-limitations)
 - [📦 Requirements](#-requirements)
 - [🚀 Setup and Running](#-setup-and-running)
+- [📊 Backtest](#-backtest)
 - [🛠️ Scripts and Utilities](#%EF%B8%8F-scripts-and-utilities)
 - [🔧 Environment Variables and Configuration](#-environment-variables-and-configuration)
 - [🧪 Tests](#-tests)
@@ -149,20 +150,25 @@
 - **Структурированное логирование** с единым хелпером `log_stage()` и
   ротируемыми лог-файлами в `logs/`.
 - **Контекст/состояние в памяти**, обновляемое на каждом тике.
-- **Демо‑индикаторы и стратегии**, достаточные для наблюдения работы
-  конвейера.
+- **Технические индикаторы**: MACD, RSI, SMA‑5/7/20/25, Bollinger Bands, спред.
+- **Стратегии**: `IndicatorSignalService` (MACD + SMA‑7/25 → BUY/HOLD) + стакан-фильтр.
+- **Оркестратор**: risk-лимиты, таймаут протухших ордеров, принятие решений.
+- **Исполнение**: идемпотентные лимитные ордера (`clientOrderId`), Deal-lifecycle.
+- **Биржевой коннектор** (`CcxtProExchangeConnector`): `stream_ticks`, `fetch_order_book`,
+  `fetch_balance`, `create_order`, `cancel_order`, `fetch_order`, `fetch_ohlcv`.
+- **SQLAlchemy 2.0+** репозитории (Order, Trade, Deal, CurrencyPair) — работают
+  с SQLite и PostgreSQL.
+- **Офлайн-бэктест** (`backtest.py`) — полный прогон стратегии на исторических
+  OHLCV-данных с метриками PnL / winrate / drawdown (см. раздел [📊 Backtest](#-backtest)).
 
-### ❌ Not Implemented / Prototype‑Only
+### ⚠️ Prototype‑Only / Ограничения
 
-- Отсутствует реальная **интеграция с биржей** (в новом конвейере пока не
-  используется CCXT.pro).
-- Нет полноценного **risk management**, учёта портфеля и продвинутых
-  стратегий.
-- Нет **database** или долговременного хранения — всё состояние находится в
-  памяти.
-- Нет Production‑grade обработки ошибок, мониторинга и backtesting.
+- Нет Production‑grade обработки ошибок, мониторинга, алертов.
+- Нет автоматического forward-test на testnet.
+- Нет полноценного risk management (позиционирование, портфель).
+- Бэктест использует bar-vs-tick упрощение (close свечи = last тик).
 
-За подробностями о долгосрочном направлении см. `doc/` и `bad_example/docs/`.
+За подробностями о долгосрочном направлении см. `doc/` и `BACKTEST_PLAN.md`.
 
 ---
 
@@ -241,6 +247,120 @@ python main.py
 
 ---
 
+## 📊 Backtest
+
+Офлайн-бэктест прогоняет боевой торговый конвейер на исторических OHLCV-данных
+(без реального подключения к бирже во время прогона) и выдаёт метрики прибыльности.
+
+### ⚡ Быстрый старт
+
+```powershell
+# Бэктест BTC/USDT за Q1 2025, таймфрейм 1h, стартовый баланс 1000 USDT
+python backtest.py BTC/USDT --from 2025-01-01 --to 2025-03-31
+
+# Тот же прогон + сохранить equity-кривую в CSV
+python backtest.py BTC/USDT --from 2025-01-01 --to 2025-03-31 --csv equity.csv
+
+# Другой таймфрейм и баланс, без кэша (свежая загрузка с биржи)
+python backtest.py ETH/USDT --from 2025-01-01 --to 2025-06-01 --timeframe 4h --balance 5000 --no-cache
+```
+
+> ⚠️ Первый запуск скачивает свечи с биржи через CCXT — нужны `EXCHANGE_API_KEY` /
+> `EXCHANGE_API_SECRET` в `.env` (или testnet-ключи при `EXCHANGE_TESTNET=true`).
+> Повторные прогоны берут данные из локального кэша `data/ohlcv_cache/` — биржа
+> не вызывается.
+
+### 🔧 Все параметры CLI
+
+| Параметр | Обязательный | По умолчанию | Описание |
+|----------|:---:|:---:|----------|
+| `symbol` | ✅ | — | Торговая пара: `BTC/USDT`, `ETH/USDT`, … |
+| `--from DATE` | ✅ | — | Начало периода `YYYY-MM-DD` |
+| `--to DATE` | — | сегодня | Конец периода `YYYY-MM-DD` |
+| `--timeframe TF` | — | `1h` | Таймфрейм свечей: `1m`, `5m`, `15m`, `1h`, `4h`, `1d` |
+| `--balance N` | — | `1000.0` | Стартовый баланс в USDT |
+| `--buy-fee N` | — | `0.1` | Комиссия на покупку, % (0.1 = 0.1%) |
+| `--sell-fee N` | — | `0.1` | Комиссия на продажу, % |
+| `--no-cache` | — | off | Принудительно скачать свечи с биржи (не читать кэш) |
+| `--csv FILE` | — | — | Сохранить equity-кривую в CSV-файл |
+
+### 📋 Формат отчёта
+
+```
+==================================================
+        BACKTEST REPORT
+==================================================
+  Сделок всего:      42
+  Прибыльных:        24
+  Убыточных:         18
+  Winrate:           57.1%
+  Суммарный PnL:     +123.4567 USDT
+  Средний PnL:       +2.9394 USDT
+  Max Drawdown:      45.2300 USDT
+  Стартовый баланс:  1000.0000 USDT
+  Итоговый баланс:   1123.4567 USDT
+  Доходность:        +12.34%
+==================================================
+
+Допущения:
+  - bar-vs-tick: close свечи = last тик (упрощение)
+  - Упрощённая модель филлов (без проскальзывания)
+  - Нейтральный стакан (orderbook-фильтр не режет сигналы)
+  - Результат — оценка 'сверху'; реальные результаты ≤ бэктеста
+```
+
+### 🗄️ Кэш OHLCV-данных
+
+Свечи кэшируются в `data/ohlcv_cache/` (папка в `.gitignore`).
+Имя файла кодирует символ + таймфрейм + начало периода:
+
+```
+data/ohlcv_cache/
+└── BTC_USDT_1h_1735689600000.json   # BTC/USDT, 1h, since=2025-01-01
+```
+
+- При повторном `python backtest.py BTC/USDT --from 2025-01-01 ...` данные
+  берутся из кэша мгновенно — биржа не вызывается.
+- Чтобы обновить данные — добавьте флаг `--no-cache`.
+- Чтобы очистить весь кэш: `Remove-Item data\ohlcv_cache\* -Force`.
+
+### 🏗️ Архитектура бэктеста
+
+```
+fetch_ohlcv (с кэшем)
+   → HistoricalTickSource: свеча → Ticker (close = last)
+      → BacktestRunner (цикл по тикам):
+           process_tick(context)       # боевой конвейер: IND → STRAT → ORCH → EXEC
+           FillSimulator.on_tick()     # пометить filled, закрыть deal, обновить баланс
+           MetricsCollector.record()   # снять equity / зафиксировать сделку
+      → MetricsCollector.finalize()   # итоговый отчёт
+```
+
+| Модуль | Путь | Назначение |
+|--------|------|------------|
+| `BacktestConfig` | `src/application/backtest/backtest_config.py` | Параметры прогона (dataclass) |
+| `OhlcvCache` | `src/application/backtest/ohlcv_cache.py` | Дисковый кэш свечей |
+| `HistoricalTickSource` | `src/application/backtest/historical_tick_source.py` | OHLCV → поток тиков |
+| `FillSimulator` | `src/application/backtest/fill_simulator.py` | Симулятор исполнения ордеров |
+| `MetricsCollector` | `src/application/backtest/metrics_collector.py` | PnL / winrate / drawdown |
+| `BacktestRunner` | `src/application/backtest/backtest_runner.py` | Оркестрация прогона |
+| `run_backtest` | `src/application/use_cases/run_backtest.py` | Use case: загрузка + запуск |
+
+### ⚠️ Важные допущения
+
+1. **Bar-vs-tick** — стратегия считает индикаторы по `close` свечи, а не по
+   реальному тик-потоку. Результаты могут незначительно отличаться от боевого
+   прогона.
+2. **Упрощённая модель филлов** — ордер заполняется при пересечении ценой
+   уровня. Проскальзывание, частичные исполнения и глубина стакана не
+   моделируются. Реальные результаты **≤ бэктеста**.
+3. **Нейтральный стакан** — orderbook-фильтр в `DecisionCenter` не активен
+   (исторического стакана нет). Бэктест пропускает больше BUY-сигналов, чем
+   в реальном режиме.
+4. **Комиссии обязательно учтены** — задаются через `--buy-fee` / `--sell-fee`.
+
+---
+
 ## 🛠️ Scripts and Utilities
 
 ### 🔧 Local helper scripts (`local_run/`)
@@ -316,11 +436,24 @@ Env‑переменная `SYMBOLS` **намеренно не использу�
 Текущий прототип содержит минимальный демонстрационный каркас тестов в каталоге
 `tests/`.
 
-### ▶️ Запуск тестов для прототипа:
+### ▶️ Запуск тестов
 
 ```powershell
+# Все юнит-тесты
 pytest tests\ -v
+
+# Только тесты бэктеста (26 тестов: OhlcvCache, HistoricalTickSource, FillSimulator, MetricsCollector, BacktestConfig)
+pytest tests\test_backtest.py -v
+
+# Конкретный модуль
+pytest tests\test_orchestrator.py -q
 ```
+
+> ℹ️ Интеграционные тесты в `tests/integration/` требуют запущенного PostgreSQL.
+> Запустить только юнит-тесты без БД:
+> ```powershell
+> pytest tests\ -v --ignore=tests\integration --ignore=tests\test_postgresql_connection.py
+> ```
 
 ---
 
@@ -330,36 +463,41 @@ pytest tests\ -v
 
 ```text
 algorithmic_trading/
-├── main.py                        # Thin entry point: runs new tick pipeline
-├── requirements.txt               # Shared dev dependencies (Python 3.12)
-├── LICENSE                        # MIT license
+├── main.py                        # Точка входа: реалтайм-торговля (одна пара)
+├── backtest.py                    # Точка входа: офлайн-бэктест на OHLCV
+├── requirements.txt               # Зависимости (Python 3.12)
+├── LICENSE
 ├── src/
-│   ├── application/
-│   │   └── use_cases/
-│   │       └── run_realtime_trading.py  # High-level scenario to run pipeline
+│   ├── config/                    # AppConfig, load_config()
 │   ├── domain/
+│   │   ├── entities/              # Order, Trade, Deal, CurrencyPair (dataclass)
+│   │   ├── interfaces/            # IExchangeConnector, IRepository, ILogger, …
 │   │   └── services/
-│   │       ├── context/
-│   │       │   └── state.py             # In-memory context and metrics
-│   │       ├── execution/
-│   │       │   └── execution_service.py # Placeholder execution service
-│   │       ├── indicators/
-│   │       │   └── indicator_engine.py  # Fake indicators, logging
-│   │       ├── market_data/
-│   │       │   └── tick_source.py       # Ticker generator (simulator)
-│   │       ├── orchestrator/
-│   │       │   └── orchestrator.py      # Naïve orchestrator
-│   │       └── strategies/
-│   │           └── strategy_hub.py      # Demo strategies/intents
-│   └── infrastructure/
-│       └── logging/
-│           └── logging_setup.py         # Logging configuration and helpers
+│   │       ├── indicators/        # IndicatorEngine (MACD, RSI, SMA, Bollinger)
+│   │       ├── strategies/        # IndicatorSignalService (BUY/HOLD)
+│   │       ├── orchestrator/      # DecisionCenter, RiskManager
+│   │       └── execution/         # ExecutionService (идемпотентные ордера)
+│   ├── infrastructure/
+│   │   ├── connectors/            # CcxtProExchangeConnector (CCXT.pro)
+│   │   ├── db/                    # SQLAlchemy models, engine/session factory
+│   │   ├── repositories/          # Order/Trade/Deal/CurrencyPair репозитории
+│   │   ├── cache/                 # In-memory кэш
+│   │   └── logging/               # LoggerAdapter, logging_setup
+│   └── application/
+│       ├── backtest/              # Бэктест: config, tick_source, fill_sim, metrics
+│       ├── use_cases/             # run_realtime_trading, run_backtest
+│       ├── workers/               # Фоновые воркеры (order_sync, persistence)
+│       └── services/              # TickPipelineService, state_snapshot
 ├── tests/
-│   └── ...                     # Demo tests for prototype (see TODO above)
-├── local_run/
-│   └── *.py                    # Experimental / helper scripts
-├── bad_example/                # Legacy full implementation (reference only)
-└── doc/                        # Design docs and technical notes
+│   ├── test_backtest.py           # 26 юнит-тестов бэктеста
+│   ├── test_orchestrator.py
+│   ├── test_indicators.py
+│   └── integration/               # Требуют PostgreSQL
+├── data/
+│   └── ohlcv_cache/               # Кэш OHLCV-свечей (.gitignore)
+├── local_run/                     # Вспомогательные скрипты
+├── bad_example_old_proj/          # Референсная реализация (только справка)
+└── doc/                           # Технические заметки и планы
 ```
 
 Подробное описание структуры наследуемой системы см. в
