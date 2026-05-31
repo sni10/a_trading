@@ -1,34 +1,59 @@
 from typing import Dict, Any, List
 
-from src.infrastructure.logging.logging_setup import log_info
+from src.domain.interfaces.logger import ILogger
+from src.domain.services.strategies.indicator_signal_service import (
+    IndicatorSignalService,
+)
 
-# Имя логгера для этого модуля
-_LOG = __name__
+_SIGNAL_SERVICE = IndicatorSignalService()
 
 
-def evaluate_strategies(context: Dict[str, Any], *, ticker_id: int, symbol: str) -> List[Dict[str, Any]]:
-    """Вернуть список намерений (intents) для указанного инструмента.
+def evaluate_strategies(
+    context: Dict[str, Any],
+    *,
+    ticker_id: int,
+    symbol: str,
+    logger: ILogger | None = None,
+) -> List[Dict[str, Any]]:
+    """Вернуть список BUY/HOLD intents для указанного инструмента.
 
-    Сейчас реализована лишь очень простая демонстрационная логика, но
-    формат логов уже приближен к боевому.
+    На текущем этапе стратегия агрегирует индикаторные сигналы и
+    формирует единый intent с уровнем confidence.
     """
 
-    log_info(
-        f"🎯 [STRAT] Оценка стратегий и формирование intents | ticker_id: {ticker_id} | symbol: {symbol}",
-        _LOG
-    )
+    if logger:
+        logger.log_info(
+            f"🎯 [STRAT] Оценка стратегий и формирование intents | ticker_id: {ticker_id} | symbol: {symbol}"
+        )
 
-    # Extremely simple placeholder: alternate HOLD and BUY/SELL for demonstration
-    if ticker_id % 3 == 0:
-        intents = [{"action": "SELL", "confidence": 0.4, "reason": "demo_down", "params": {}}]
-    elif ticker_id % 2 == 0:
-        intents = [{"action": "BUY", "confidence": 0.7, "reason": "demo_up", "params": {"budget": 100}}]
+    indicators = (context.get("indicators") or {}).get(symbol)
+    if not indicators:
+        intents = [
+            {
+                "action": "HOLD",
+                "confidence": 0.0,
+                "reason": "no_indicators",
+                "params": {},
+            }
+        ]
     else:
-        intents = [{"action": "HOLD", "confidence": 0.1, "reason": "no_signal", "params": {}}]
+        signal = _SIGNAL_SERVICE.evaluate(indicators)
+        action = "BUY" if signal.is_bullish else "HOLD"
+        intents = [
+            {
+                "action": action,
+                "confidence": signal.confidence,
+                "reason": signal.reason,
+                "params": {
+                    "signal_score": signal.score,
+                    "signal_details": signal.details,
+                },
+            }
+        ]
 
-    log_info(
-        f"🎯 [STRAT] Intents сформированы | ticker_id: {ticker_id} | symbol: {symbol} | intents: {intents}",
-        _LOG
-    )
+    if logger:
+        logger.log_info(
+            f"🎯 [STRAT] Intents сформированы | ticker_id: {ticker_id} | symbol: {symbol} | intents: {intents}"
+        )
     return intents
 

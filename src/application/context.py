@@ -3,10 +3,9 @@
 На этом этапе мы не переписываем существующий dict‑контекст, а
 "обогащаем" его сущностями :class:`CurrencyPair` и in-memory кэшами.
 
-Символы берутся из :class:`AppConfig`, базовая/котируемая валюта пары
-получается из строки вида ``"BTC/USDT"``. Форма кэша ориентирована на
-структуры ccxt (см. ``doc/ccxt_data_structures.md`` и
-``doc/EXCHANGE_INTEGRATION.md``).
+Пары загружаются через :class:`ICurrencyPairRepository` (из БД или in-memory).
+Форма кэша ориентирована на структуры ccxt (см. ``doc/ccxt_data_structures.md``
+и ``doc/EXCHANGE_INTEGRATION.md``).
 """
 
 from __future__ import annotations
@@ -21,19 +20,18 @@ from src.infrastructure.cache.in_memory import (
     InMemoryIndicatorStore,
     InMemoryMarketCache,
 )
-from src.infrastructure.logging.logging_setup import log_stage
-from src.infrastructure.repositories import InMemoryCurrencyPairRepository
+from src.infrastructure.logging import log_stage
 
 
 def build_context(
     config: AppConfig,
     context: Dict[str, Any],
-    pair_repository: ICurrencyPairRepository | None = None,
+    pair_repository: ICurrencyPairRepository,
 ) -> Dict[str, Any]:
     """Создать CurrencyPair и in-memory кэши для активных пар.
 
-    В текущем прототипе один процесс обслуживает **одну** пару из
-    :class:`AppConfig` (``config.symbol``).
+    ВАЖНО: pair_repository ОБЯЗАТЕЛЕН! Символы загружаются из репозитория,
+    а не из AppConfig (config.symbol больше не существует).
 
     Возвращает тот же dict `context`, дополнив его ключами:
 
@@ -41,18 +39,6 @@ def build_context(
     * "market_caches" – dict[symbol, IMarketCache]
     * "indicator_stores" – dict[symbol, IIndicatorStore]
     """
-
-    # Если репозиторий не передан явно (юнит‑тестом или другим
-    # use‑case), создаём in-memory реализацию из одиночного символа
-    # AppConfig. Тем самым точкой агрегации становится CurrencyPair,
-    # а не «сырые» строки символов.
-    if pair_repository is None:
-        log_stage(
-            "BOOT",
-            "Создание in-memory репозитория валютных пар по конфигу",
-            symbol=config.symbol,
-        )
-        pair_repository = InMemoryCurrencyPairRepository.from_symbols([config.symbol])
 
     pairs: Dict[str, CurrencyPair] = {}
     market_caches: Dict[str, IMarketCache] = {}
@@ -62,7 +48,6 @@ def build_context(
         "BOOT",
         "Старт сборки контекста под тиковый конвейер",
         environment=config.environment,
-        base_symbol=config.symbol,
     )
 
     active_pairs = list(pair_repository.list_active())
@@ -75,17 +60,16 @@ def build_context(
     for pair in active_pairs:
         symbol = pair.symbol
         pairs[symbol] = pair
-        market_caches[symbol] = InMemoryMarketCache(pair)
+        market_caches[symbol] = InMemoryMarketCache(pair, config)
         indicator_stores[symbol] = InMemoryIndicatorStore(pair, config)
 
         log_stage(
             "BOOT",
             "Созданы in-memory кэши для пары",
             symbol=symbol,
-            bar_window_size=pair.bar_window_size,
-            trades_history_size=pair.trades_history_size,
-            orderbook_depth=pair.orderbook_depth,
-            indicator_window_size=pair.indicator_window_size,
+            deal_quota=pair.deal_quota,
+            profit_markup=pair.profit_markup,
+            deal_count=pair.deal_count,
         )
 
     # Сохраняем построенные структуры в общий dict‑контекст.

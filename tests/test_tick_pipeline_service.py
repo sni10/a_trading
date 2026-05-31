@@ -67,7 +67,7 @@ def test_process_ticker_does_not_execute_on_hold(monkeypatch, base_context) -> N
     service = TickPipelineService(cfg)
 
     ticker_id = 1
-    symbol = cfg.symbol
+    symbol = "BTC/USDT"
     price = 100.0
     ts = 1_700_000_000_000
 
@@ -150,7 +150,7 @@ def test_process_ticker_executes_on_non_hold(monkeypatch, base_context) -> None:
     service = TickPipelineService(cfg)
 
     ticker_id = 5
-    symbol = cfg.symbol
+    symbol = "BTC/USDT"
     price = 250.5
     ts = 1_700_000_100_000
 

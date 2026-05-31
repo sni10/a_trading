@@ -40,5 +40,11 @@ class ICurrencyPairRepository(Protocol):
     def get_by_symbol(self, symbol: str) -> CurrencyPair | None:
         """Найти пару по символу биржи ("BTC/USDT")."""
 
+    def upsert(self, pair: CurrencyPair) -> CurrencyPair:
+        """Создать или обновить пару по ``pair.symbol``.
+
+        Нужен для bootstrap/синхронизации конфигурации пар в БД.
+        """
+
 
 __all__ = ["ICurrencyPairRepository"]

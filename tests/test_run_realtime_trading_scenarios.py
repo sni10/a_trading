@@ -4,7 +4,8 @@ from typing import Any, Dict, Iterable, List
 
 import pytest
 
-from src.application.use_cases import run_realtime_trading
+from src.application.use_cases import run_offline_demo
+from src.domain.entities.currency_pair import CurrencyPair
 
 
 class _FakeTick:
@@ -62,6 +63,29 @@ class _DummySnapshotService:
         self.saved_ids.append(ticker_id)
 
 
+class _DummyPairRepository:
+    def __init__(self, pairs: list[CurrencyPair]):
+        self._pairs = list(pairs)
+        self._by_symbol = {p.symbol: p for p in self._pairs}
+
+    def list_all(self, include_disabled: bool = True) -> list[CurrencyPair]:
+        if include_disabled:
+            return list(self._pairs)
+        return [p for p in self._pairs if p.enabled]
+
+    def list_active(self) -> list[CurrencyPair]:
+        return [p for p in self._pairs if p.enabled]
+
+    def get_by_symbol(self, symbol: str) -> CurrencyPair | None:
+        return self._by_symbol.get(symbol)
+
+    def upsert(self, pair: CurrencyPair) -> CurrencyPair:
+        self._by_symbol[pair.symbol] = pair
+        if pair not in self._pairs:
+            self._pairs.append(pair)
+        return pair
+
+
 def _fake_generate_ticks(symbol: str, max_ticks: int, sleep_sec: float):  # type: ignore[override]
     # sleep_sec игнорируется – в тестах не должно быть задержек
     del sleep_sec
@@ -89,7 +113,7 @@ def test_run_demo_offline_uses_pipeline_for_each_generated_tick(
 
     # --- monkeypatch генератора тиков и сервисов ---
     monkeypatch.setattr(
-        run_realtime_trading,
+        run_offline_demo,
         "generate_ticks",
         lambda symbol_arg, max_ticks=max_ticks, sleep_sec=0.0: _fake_generate_ticks(
             symbol_arg,
@@ -100,16 +124,16 @@ def test_run_demo_offline_uses_pipeline_for_each_generated_tick(
 
     fake_pipeline = _FakePipeline()
     monkeypatch.setattr(
-        run_realtime_trading,
+        run_offline_demo,
         "TickPipelineService",
         lambda cfg: fake_pipeline,
     )
 
     dummy_snapshot = _DummySnapshotService()
     monkeypatch.setattr(
-        run_realtime_trading,
+        run_offline_demo,
         "StateSnapshotService",
-        lambda store, cfg: dummy_snapshot,
+        lambda store, cfg, *, symbol: dummy_snapshot,
     )
 
     # --- запуск сценария ---
@@ -119,15 +143,16 @@ def test_run_demo_offline_uses_pipeline_for_each_generated_tick(
 
     def fake_load_config(symbol: str | None = None) -> AppConfig:  # type: ignore[override]
         cfg = AppConfig()
-        if symbol is not None:
-            cfg.symbol = symbol
         cfg.max_ticks = max_ticks
         cfg.ticker_sleep_sec = 0.0
         return cfg
 
-    monkeypatch.setattr(run_realtime_trading, "load_config", fake_load_config)
+    monkeypatch.setattr(run_offline_demo, "load_config", fake_load_config)
 
-    run_realtime_trading.run_demo_offline(symbol=symbol)
+    pair_repo = _DummyPairRepository(
+        [CurrencyPair(symbol=symbol, base_currency="BTC", quote_currency="USDT")]
+    )
+    run_offline_demo.run_demo_offline(pair_repository=pair_repo, symbol=symbol)
 
     # --- проверки ---
     # Должно быть ровно max_ticks вызовов pipeline.process_tick

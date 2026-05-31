@@ -31,7 +31,7 @@ def test_load_config_defaults(monkeypatch) -> None:
     cfg = load_config()
 
     assert cfg.environment == "local"
-    assert cfg.symbol == "BTC/USDT"
+    # symbol больше НЕ в AppConfig - он в CurrencyPair
     assert cfg.max_ticks == 10
     assert cfg.ticker_sleep_sec == 0.2
     assert cfg.indicator_fast_interval == 1
@@ -52,9 +52,7 @@ def test_load_config_from_env(monkeypatch) -> None:
     cfg = load_config()
 
     assert cfg.environment == "dev"
-    # Символ больше не управляется через env-переменную SYMBOLS,
-    # поэтому берётся дефолт из AppConfig.
-    assert cfg.symbol == "BTC/USDT"
+    # symbol больше НЕ в AppConfig - он в CurrencyPair
     assert cfg.max_ticks == 5
     assert cfg.ticker_sleep_sec == 0.1
     assert cfg.indicator_fast_interval == 2

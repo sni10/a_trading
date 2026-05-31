@@ -3,10 +3,15 @@ import itertools
 import random
 from typing import Dict, Iterable
 
-from src.infrastructure.logging.logging_setup import log_stage
+from src.domain.interfaces.logger import ILogger
 
 
-def generate_ticks(symbol: str, max_ticks: int = 10, sleep_sec: float = 0.2) -> Iterable[Dict]:
+def generate_ticks(
+    symbol: str,
+    max_ticks: int = 10,
+    sleep_sec: float = 0.2,
+    logger: ILogger | None = None,
+) -> Iterable[Dict]:
     """Синхронный фейковый генератор тиков для **одной** пары.
 
     Возвращает ``dict`` с ключами ``symbol``, ``price``, ``ts``.
@@ -14,13 +19,11 @@ def generate_ticks(symbol: str, max_ticks: int = 10, sleep_sec: float = 0.2) -> 
     логируются на стадии TICKER основного конвейера.
     """
 
-    log_stage(
-        "TICKER",
-        "Старт генерации тестовых тиков",
-        symbol=symbol,
-        max_ticks=max_ticks,
-        sleep_sec=sleep_sec,
-    )
+    if logger:
+        logger.log_stage(
+            "TICKER",
+            f"Старт генерации тестовых тиков: {symbol}, max_ticks={max_ticks}, sleep_sec={sleep_sec}",
+        )
 
     base_price = 100.0 + random.random() * 10
     clock = itertools.count(1)

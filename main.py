@@ -18,21 +18,26 @@ from src.application.use_cases.run_realtime_trading import (
 )
 
 
-def _parse_cli_pair(argv: list[str]) -> str:
+def _parse_cli_pair(argv: list[str]) -> str | None:
     """Извлечь символ валютной пары из аргументов командной строки.
 
     Ожидается формат вызова::
 
-        python main.py BTC/USDT
+        python main.py              # Пара берётся из БД (должна быть ровно одна активная)
+        python main.py BTC/USDT     # Явно указанная пара
 
-    Если пара не указана или формат некорректен, процесс завершается
-    с понятным сообщением.
+    Returns:
+        None если пара не указана (будет взята из БД),
+        str если пара указана явно.
+
+    Raises:
+        SystemExit: если формат указанной пары некорректен.
     """
 
     if len(argv) < 2:
-        raise SystemExit("Usage: python main.py BTC/USDT")
+        return None
 
-    symbol = argv[1].strip()
+    symbol = argv[1].strip().upper()
     if "/" not in symbol or symbol.count("/") != 1:
         raise SystemExit(
             f"Invalid pair symbol: {symbol!r}. Expected format BASE/QUOTE, e.g. BTC/USDT"
@@ -51,7 +56,7 @@ def _run_cli(argv: list[str]) -> None:
     выполнения.
     """
 
-    from src.infrastructure.logging.logging_setup import log_stage
+    from src.infrastructure.logging import log_stage
 
     try:
         cli_symbol = _parse_cli_pair(argv)

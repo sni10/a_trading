@@ -13,9 +13,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import TypedDict
 
-from src.infrastructure.connectors.interfaces.exchange_connector import (
-    IExchangeConnector,
-)
+from src.domain.interfaces.exchange_connector import IExchangeConnector
 
 
 class Ticker(TypedDict):
