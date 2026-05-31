@@ -13,8 +13,9 @@ class OrderSyncService:
     """Сервис синхронизации ордеров с биржей.
 
     Отвечает за:
-    - Загрузку открытых ордеров с биржи
+    - Загрузку ВСЕХ ордеров с биржи
     - Сравнение с локальным состоянием (БД)
+    - ЕСЛИ ордер не имеет сделки в БД - игнорировать.
     - Обновление статусов при расхождениях
     - Разрешение конфликтов (биржа - источник истины)
     """
@@ -40,19 +41,21 @@ class OrderSyncService:
         """Синхронизировать ордера с биржей.
 
         Алгоритм:
+        0. Проверить сделки открытые и связанные ордера бай/селл
         1. Загрузить открытые ордера с биржи (fetch_open_orders)
         2. Загрузить локальные открытые ордера из БД
         3. Сравнить состояния:
            - Если ордер закрылся на бирже -> обновить в БД
            - Если ордер частично исполнен -> обновить filled/remaining
            - Если ордер отменён -> пометить canceled
+        3,1 Если селл исполнен -> обновить в БД. ЗАкрыть сделку.
         4. Вернуть актуальный список
 
         Args:
             symbol: Символ валютной пары
 
         Returns:
-            List[Order] - актуальные открытые ордера после синхронизации
+            List[Order] - актуальные ордера после синхронизации
         """
         if self._logger:
             self._logger.log_stage("ORDER_SYNC", f"Syncing orders for {symbol}")
@@ -143,12 +146,59 @@ class OrderSyncService:
             or local.average != exchange.average
         )
 
+    def apply_exchange_order_to_local(
+        self,
+        local_order: Order,
+        exchange_order_dict: dict,
+        symbol: str,
+        context: dict | None = None,
+    ) -> None:
+        """Применить данные с биржи к локальному ордеру.
+
+        Обновляет локальный Order данными из ответа биржи (CCXT Order Structure).
+
+        Args:
+            local_order: Локальный ордер (entity)
+            exchange_order_dict: Ответ от биржи (CCXT dict)
+            symbol: Торговая пара
+            context: Контекст приложения (опционально, для обновления in-memory)
+        """
+        # Обновить поля локального ордера данными с биржи
+        local_order.exchange_order_id = str(exchange_order_dict.get("id", ""))
+        local_order.status = str(exchange_order_dict.get("status", ""))
+        local_order.filled = float(exchange_order_dict.get("filled", 0.0))
+        local_order.remaining = float(exchange_order_dict.get("remaining", 0.0))
+        local_order.cost = float(exchange_order_dict.get("cost", 0.0))
+        local_order.average = (
+            float(exchange_order_dict["average"])
+            if exchange_order_dict.get("average")
+            else None
+        )
+        local_order.last_trade_timestamp = (
+            int(exchange_order_dict["lastTradeTimestamp"])
+            if exchange_order_dict.get("lastTradeTimestamp")
+            else None
+        )
+
+        # Сохранить в БД
+        self._order_repo.upsert(local_order)
+
+        if self._logger:
+            self._logger.log_stage(
+                "ORDER_SYNC",
+                f"Ордер обновлён с биржи",
+                order_id=local_order.id,
+                exchange_order_id=local_order.exchange_order_id,
+                status=local_order.status,
+                filled=local_order.filled,
+            )
+
     # =========================================================================
     # ЗАГЛУШКИ (TODO: Удалить после реализации IExchangeConnector методов)
     # =========================================================================
 
     def _fetch_open_orders_stub(self, symbol: str) -> list[Order]:
-        """ЗАГЛУШКА: Получить открытые ордера с биржи.
+        """ЗАГЛУШКА: Получить все ордера с биржи.
 
         TODO: Заменить на self._exchange.fetch_open_orders(symbol)
         """

@@ -32,11 +32,7 @@ async def order_sync_worker(
 
     while True:
         try:
-            await order_sync.sync_orders_with_exchange(
-                symbol,
-                context=context,
-                buy_timeout_sec=config.buy_order_timeout_sec,
-            )
+            order_sync.sync_orders_with_exchange(symbol)
         except Exception as exc:  # pragma: no cover - защитный контур
             log_stage(
                 "ORDER_SYNC",
@@ -47,6 +43,8 @@ async def order_sync_worker(
         if is_stopped is not None and is_stopped():
             log_stage("STOP", "Остановка воркера синхронизации ордеров", symbol=symbol)
             break
+
+        await asyncio.sleep(active_interval)
 
         orders = (context.get("orders") or {}).get(symbol) or []
         has_open = any(str(getattr(order, "status", "")).lower() == "open" for order in orders)

@@ -238,5 +238,28 @@ class StateSnapshotService:
                 symbol=self._symbol,
             )
 
+        # КРИТИЧЕСКИ ВАЖНО: Восстановить связи Deal <-> Order
+        if deals and orders:
+            for deal in deals:
+                # Найти BUY ордер для этой сделки
+                buy_order = next(
+                    (o for o in orders if o.deal_id == deal.id and str(o.side).lower() == "buy"),
+                    None
+                )
+                # Найти SELL ордер для этой сделки
+                sell_order = next(
+                    (o for o in orders if o.deal_id == deal.id and str(o.side).lower() == "sell"),
+                    None
+                )
+
+                deal.buy_order = buy_order
+                deal.sell_order = sell_order
+
+                log_stage(
+                    "DB_LOAD",
+                    f"🔗 Восстановлены связи для сделки {deal.id}: buy_order={buy_order.id if buy_order else None}, sell_order={sell_order.id if sell_order else None}",
+                    symbol=self._symbol,
+                )
+
 
 __all__ = ["StateSnapshotService"]

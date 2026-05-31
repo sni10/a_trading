@@ -59,5 +59,64 @@ class IExchangeConnector(Protocol):
             }
         """
 
+    async def fetch_balance(self) -> dict:
+        """Запросить балансы всех валют на аккаунте.
+
+        Формат результата совместим с CCXT ``fetch_balance()``:
+
+        .. code-block:: python
+
+            balance = {
+                "BTC": {"free": 1.5, "used": 0.0, "total": 1.5},
+                "USDT": {"free": 10000.0, "used": 500.0, "total": 10500.0},
+                ...
+            }
+        """
+
+    async def create_order(
+        self,
+        symbol: str,
+        order_type: str,
+        side: str,
+        amount: float,
+        price: float | None = None,
+        params: dict | None = None,
+    ) -> dict:
+        """Создать ордер на бирже.
+
+        Args:
+            symbol: Торговая пара (например 'BTC/USDT')
+            order_type: Тип ордера ('limit', 'market')
+            side: Сторона ('buy', 'sell')
+            amount: Количество базовой валюты
+            price: Цена (для limit ордеров)
+            params: Дополнительные параметры (clientOrderId и т.д.)
+
+        Returns:
+            CCXT Order Structure (см. Order.from_ccxt())
+        """
+
+    async def cancel_order(self, order_id: str, symbol: str) -> dict:
+        """Отменить ордер на бирже.
+
+        Args:
+            order_id: ID ордера на бирже
+            symbol: Торговая пара
+
+        Returns:
+            CCXT Order Structure отменённого ордера
+        """
+
+    async def fetch_order(self, order_id: str, symbol: str) -> dict:
+        """Запросить текущий статус ордера с биржи.
+
+        Args:
+            order_id: ID ордера на бирже
+            symbol: Торговая пара
+
+        Returns:
+            CCXT Order Structure
+        """
+
 
 __all__ = ["IExchangeConnector"]

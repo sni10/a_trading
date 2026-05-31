@@ -117,11 +117,21 @@ def load_config(
     # --- API‑ключи биржи ---
     # Приоритет: прямые значения в env, затем файлы из env,
     # затем secure_api_keys/{exchange_id}/api_key.txt (api_secret.txt).
+    # Если значение выглядит как путь к файлу, читаем файл.
     env_api_key = os.getenv("EXCHANGE_API_KEY")
     env_api_secret = os.getenv("EXCHANGE_API_SECRET")
 
     if env_api_key is not None:
-        base.exchange_api_key = env_api_key
+        # Проверяем: если выглядит как путь к файлу - читаем файл
+        if "/" in env_api_key or "\\" in env_api_key or env_api_key.endswith(".txt"):
+            from pathlib import Path
+            key_path = Path(env_api_key)
+            if key_path.exists():
+                base.exchange_api_key = key_path.read_text().strip()
+            else:
+                base.exchange_api_key = None
+        else:
+            base.exchange_api_key = env_api_key
     else:
         file_key = read_key_file("EXCHANGE_API_KEY_FILE")
         if file_key is None:
@@ -130,7 +140,13 @@ def load_config(
             base.exchange_api_key = file_key
 
     if env_api_secret is not None:
-        base.exchange_api_secret = env_api_secret
+        # Проверяем: если выглядит как путь к файлу - НЕ читаем (Ed25519 ключ)
+        # Для Ed25519 секрет не нужен, ключ загружается отдельно в коннекторе
+        if "/" in env_api_secret or "\\" in env_api_secret or env_api_secret.endswith(".pem"):
+            # Это путь к Ed25519 ключу, не читаем его здесь
+            base.exchange_api_secret = None
+        else:
+            base.exchange_api_secret = env_api_secret
     else:
         file_secret = read_key_file("EXCHANGE_API_SECRET_FILE")
         if file_secret is None:

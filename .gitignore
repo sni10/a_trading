@@ -78,3 +78,4 @@ order_book_analysis.log
 # Системные файлы для macOS и Windows.
 .DS_Store
 Thumbs.db
+/bad_example_old_proj/

@@ -60,8 +60,10 @@ async def _place_pending_orders(
 ) -> None:
     deals = (context.get("deals") or {}).get(symbol) or []
     if not deals:
+        log_stage("EXEC", f"Нет сделок для {symbol}")
         return
 
+    log_stage("EXEC", f"Обработка {len(deals)} сделок для {symbol}")
     execution_state = context.setdefault("execution", {}).setdefault(symbol, {})
     now_ts = _now_ms()
 
@@ -72,7 +74,15 @@ async def _place_pending_orders(
             continue
 
         buy_order = deal.buy_order
-        if _can_place_order(buy_order, execution_state, now_ts, retry_sec):
+        can_place = _can_place_order(buy_order, execution_state, now_ts, retry_sec)
+        log_stage(
+            "EXEC",
+            f"BUY order deal_id={deal.id}: can_place={can_place}, "
+            f"order_id={buy_order.id if buy_order else None}, "
+            f"status={buy_order.status if buy_order else None}, "
+            f"exchange_order_id={buy_order.exchange_order_id if buy_order else None}"
+        )
+        if can_place:
             created = await _create_exchange_order(connector, buy_order, symbol)
             if created is not None:
                 order_sync.apply_exchange_order_to_local(
@@ -84,7 +94,15 @@ async def _place_pending_orders(
             _mark_attempt(execution_state, buy_order, now_ts)
 
         sell_order = deal.sell_order
-        if _can_place_sell(deal, execution_state, now_ts, retry_sec):
+        can_place_sell = _can_place_order(sell_order, execution_state, now_ts, retry_sec)
+        log_stage(
+            "EXEC",
+            f"SELL order deal_id={deal.id}: can_place={can_place_sell}, "
+            f"order_id={sell_order.id if sell_order else None}, "
+            f"status={sell_order.status if sell_order else None}, "
+            f"exchange_order_id={sell_order.exchange_order_id if sell_order else None}"
+        )
+        if can_place_sell:
             created = await _create_exchange_order(connector, sell_order, symbol)
             if created is not None:
                 order_sync.apply_exchange_order_to_local(
@@ -111,21 +129,6 @@ def _can_place_order(
     if not _ready_for_retry(execution_state, order, now_ts, retry_sec):
         return False
     return True
-
-
-def _can_place_sell(
-    deal: Deal,
-    execution_state: dict,
-    now_ts: int,
-    retry_sec: float,
-) -> bool:
-    buy_order = deal.buy_order
-    sell_order = deal.sell_order
-    if buy_order is None or sell_order is None:
-        return False
-    if not buy_order.is_filled():
-        return False
-    return _can_place_order(sell_order, execution_state, now_ts, retry_sec)
 
 
 def _ready_for_retry(

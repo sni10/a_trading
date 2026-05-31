@@ -12,10 +12,13 @@ from src.application.use_cases.run_offline_demo import run_demo_offline
 from src.application.use_cases.trading_loop import run_realtime_core
 from src.application.use_cases.worker_manager import run_order_book_refresh_worker
 from src.application.workers.persistence_worker import PersistenceWorker
+from src.application.workers.order_execution_worker import order_execution_worker
+from src.application.workers.order_sync_worker import order_sync_worker
 from src.config.config import AppConfig, load_config
 from src.domain.entities.currency_pair import CurrencyPair
 from src.domain.interfaces.currency_pair_repository import ICurrencyPairRepository
 from src.domain.services.context.state import init_context
+from src.domain.services.order_sync_service import OrderSyncService
 from src.domain.services.ticker.ticker_source import TickSource
 from src.infrastructure.connectors.ccxt_pro_exchange_connector import (
     CcxtProExchangeConnector,
@@ -142,11 +145,67 @@ async def run_realtime_from_exchange(symbol: str | None = None) -> None:
     mode_str = "Sandbox" if cfg.sandbox_mode else "Production"
     log_info(f"✅ Коннектор инициализирован ({cfg.exchange_id}, {mode_str})", _LOG)
 
+    # Запросить баланс для торгуемой пары
+    try:
+        balance = await connector.fetch_balance()
+        base_balance = balance.get(pair.base_currency, {"free": 0.0, "used": 0.0, "total": 0.0})
+        quote_balance = balance.get(pair.quote_currency, {"free": 0.0, "used": 0.0, "total": 0.0})
+
+        log_info(
+            f"💰 Баланс {pair.base_currency}: "
+            f"free={base_balance['free']:.8f}, "
+            f"used={base_balance['used']:.8f}, "
+            f"total={base_balance['total']:.8f}",
+            _LOG,
+        )
+        log_info(
+            f"💰 Баланс {pair.quote_currency}: "
+            f"free={quote_balance['free']:.8f}, "
+            f"used={quote_balance['used']:.8f}, "
+            f"total={quote_balance['total']:.8f}",
+            _LOG,
+        )
+    except Exception as e:
+        log_warning(
+            f"⚠️ Не удалось запросить баланс: {e!r} (возможно нет API ключей или прав)",
+            _LOG,
+        )
+
     # Воркер стакана
     orderbook_task = asyncio.create_task(
         run_order_book_refresh_worker(connector, context, cfg, symbol=active_symbol)
     )
     log_info("✅ Воркер стакана запущен", _LOG)
+
+    # Сервис синхронизации ордеров
+    order_sync = OrderSyncService(
+        order_repo=repos.order_repository,
+        exchange=connector,
+    )
+    log_info("✅ Сервис синхронизации ордеров создан", _LOG)
+
+    # Воркер исполнения ордеров (размещение на бирже)
+    execution_task = asyncio.create_task(
+        order_execution_worker(
+            connector=connector,
+            order_sync=order_sync,
+            context=context,
+            config=cfg,
+            symbol=active_symbol,
+        )
+    )
+    log_info("✅ Воркер исполнения ордеров запущен", _LOG)
+
+    # Воркер синхронизации ордеров (проверка статусов с биржи)
+    sync_task = asyncio.create_task(
+        order_sync_worker(
+            order_sync=order_sync,
+            context=context,
+            config=cfg,
+            symbol=active_symbol,
+        )
+    )
+    log_info("✅ Воркер синхронизации ордеров запущен (интервал: 5 сек)", _LOG)
 
     # Воркер периодического сброса в БД (каждые 3 минуты)
     persistence_worker = PersistenceWorker(
@@ -189,6 +248,22 @@ async def run_realtime_from_exchange(symbol: str | None = None) -> None:
         # Остановить воркер персистентности (внутри сделает финальный сброс в БД)
         await persistence_worker.stop()
         log_info("✅ Воркер персистентности остановлен, финальный сброс в БД выполнен", _LOG)
+
+        # Остановить воркер синхронизации ордеров
+        sync_task.cancel()
+        try:
+            await sync_task
+        except asyncio.CancelledError:
+            pass
+        log_info("✅ Воркер синхронизации ордеров остановлен", _LOG)
+
+        # Остановить воркер исполнения ордеров
+        execution_task.cancel()
+        try:
+            await execution_task
+        except asyncio.CancelledError:
+            pass
+        log_info("✅ Воркер исполнения ордеров остановлен", _LOG)
 
         # Остановить воркер стакана
         orderbook_task.cancel()

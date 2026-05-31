@@ -18,7 +18,10 @@ from __future__ import annotations
 поднимает понятное исключение при инициализации.
 """
 
+import base64
+import hashlib
 from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import Any
 
 from src.config.config import AppConfig
@@ -28,6 +31,7 @@ from src.infrastructure.logging.logging_setup import log_stage
 
 try:  # pragma: no cover - защитный импорт для окружений без ccxt.pro
     import ccxt.pro as ccxt  # type: ignore[import]
+    from cryptography.hazmat.primitives.serialization import load_pem_private_key
 except ModuleNotFoundError as exc:  # pragma: no cover - пакет реально не установлен
     # Классический кейс: в окружении нет ``ccxt.pro`` как модуля.
     ccxt = None  # type: ignore[assignment]
@@ -107,13 +111,79 @@ class CcxtProExchangeConnector(IExchangeConnector):
             # см. doc/ccxt_data_structures.md и официальную документацию ccxt
             self._exchange.set_sandbox_mode(True)
 
+        # Ed25519 авторизация для Binance (если есть приватный ключ)
+        self._ed25519_private_key = None
+        self._api_key = api_key
+        self._original_sign = self._exchange.sign  # Сохраняем оригинальный метод
+        if exchange_id == "binance" and api_key:
+            ed25519_key_path = Path("secure_api_keys/binance/id_ed25519.pem")
+            if ed25519_key_path.exists():
+                try:
+                    with open(ed25519_key_path, "rb") as f:
+                        self._ed25519_private_key = load_pem_private_key(
+                            data=f.read(), password=None
+                        )
+
+                    # Переопределяем метод sign для использования Ed25519
+                    self._exchange.sign = self._ed25519_sign_wrapper
+
+                    log_stage(
+                        "BOOT",
+                        "✅ Ed25519 авторизация активирована",
+                        key_path=str(ed25519_key_path),
+                    )
+                except Exception as e:
+                    log_stage(
+                        "BOOT",
+                        f"⚠️ Не удалось загрузить Ed25519 ключ: {e}",
+                        key_path=str(ed25519_key_path),
+                    )
+
         log_stage(
             "BOOT",
             "Создан CcxtProExchangeConnector",
             exchange_id=exchange_id,
             sandbox=getattr(config, "sandbox_mode", False),
             has_api_key=bool(api_key and api_secret),
+            ed25519=self._ed25519_private_key is not None,
         )
+
+    def _ed25519_sign_wrapper(self, path, api="public", method="GET", params=None, headers=None, body=None):
+        """Wrapper для подписи запросов с Ed25519 (Binance testnet)."""
+        if params is None:
+            params = {}
+        if headers is None:
+            headers = {}
+
+        # Для приватных запросов используем Ed25519
+        if api == "private" and self._ed25519_private_key:
+            import urllib.parse
+            import time
+
+            params = dict(params)
+            params["timestamp"] = int(time.time() * 1000)
+
+            # Создаём payload для подписи
+            payload = urllib.parse.urlencode(params, encoding="UTF-8")
+            signature = base64.b64encode(
+                self._ed25519_private_key.sign(payload.encode("ASCII"))
+            ).decode("utf-8")
+
+            params["signature"] = signature
+            headers["X-MBX-APIKEY"] = self._api_key
+
+            # Формируем URL с параметрами
+            url = self._exchange.urls["api"][api] + "/" + path
+            if method == "GET" or method == "DELETE":
+                url += "?" + urllib.parse.urlencode(params)
+                body = None
+            else:
+                body = urllib.parse.urlencode(params)
+
+            return {"url": url, "method": method, "body": body, "headers": headers}
+
+        # Для публичных запросов используем стандартную подпись
+        return self._original_sign(path, api, method, params, headers, body)
 
     async def close(self) -> None:
         await self._exchange.close()
@@ -174,6 +244,122 @@ class CcxtProExchangeConnector(IExchangeConnector):
             "datetime": order_book["datetime"],
             "nonce": order_book.get("nonce"),
         }
+
+    async def fetch_balance(self) -> dict:
+        """Запросить балансы всех валют на аккаунте через ``fetch_balance``.
+
+        Возвращает упрощённый формат: валюта -> {free, used, total}.
+        """
+
+        balance_raw = await self._exchange.fetch_balance()
+
+        # CCXT возвращает сложную структуру, извлекаем только нужное
+        result = {}
+        for currency, info in balance_raw.items():
+            if currency in ("free", "used", "total", "info", "timestamp", "datetime"):
+                # Пропускаем служебные поля CCXT
+                continue
+            if isinstance(info, dict):
+                result[currency] = {
+                    "free": float(info.get("free", 0.0)),
+                    "used": float(info.get("used", 0.0)),
+                    "total": float(info.get("total", 0.0)),
+                }
+        return result
+
+    async def create_order(
+        self,
+        symbol: str,
+        order_type: str,
+        side: str,
+        amount: float,
+        price: float | None = None,
+        params: dict | None = None,
+    ) -> dict:
+        """Создать ордер на бирже через ccxt ``create_order()``.
+
+        Args:
+            symbol: Торговая пара (например 'BTC/USDT')
+            order_type: Тип ордера ('limit', 'market')
+            side: Сторона ('buy', 'sell')
+            amount: Количество базовой валюты
+            price: Цена (для limit ордеров)
+            params: Дополнительные параметры (clientOrderId и т.д.)
+
+        Returns:
+            CCXT Order Structure
+        """
+        params = params or {}
+
+        log_stage(
+            "EXEC",
+            f"Создание ордера на бирже",
+            symbol=symbol,
+            side=side,
+            type=order_type,
+            amount=amount,
+            price=price,
+        )
+
+        # CCXT API: create_order(symbol, type, side, amount, price=None, params={})
+        order = await self._exchange.create_order(
+            symbol=symbol,
+            type=order_type,
+            side=side,
+            amount=amount,
+            price=price,
+            params=params,
+        )
+
+        log_stage(
+            "EXEC",
+            f"✅ Ордер создан",
+            exchange_order_id=order.get("id"),
+            status=order.get("status"),
+        )
+
+        return order
+
+    async def cancel_order(self, order_id: str, symbol: str) -> dict:
+        """Отменить ордер на бирже через ccxt ``cancel_order()``.
+
+        Args:
+            order_id: ID ордера на бирже
+            symbol: Торговая пара
+
+        Returns:
+            CCXT Order Structure отменённого ордера
+        """
+        log_stage(
+            "EXEC",
+            f"Отмена ордера",
+            exchange_order_id=order_id,
+            symbol=symbol,
+        )
+
+        order = await self._exchange.cancel_order(order_id, symbol)
+
+        log_stage(
+            "EXEC",
+            f"✅ Ордер отменён",
+            exchange_order_id=order_id,
+            status=order.get("status"),
+        )
+
+        return order
+
+    async def fetch_order(self, order_id: str, symbol: str) -> dict:
+        """Запросить статус ордера через ccxt ``fetch_order()``.
+
+        Args:
+            order_id: ID ордера на бирже
+            symbol: Торговая пара
+
+        Returns:
+            CCXT Order Structure
+        """
+        order = await self._exchange.fetch_order(order_id, symbol)
+        return order
 
 
 __all__ = ["CcxtProExchangeConnector"]
