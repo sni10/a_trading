@@ -118,5 +118,25 @@ class IExchangeConnector(Protocol):
             CCXT Order Structure
         """
 
+    async def fetch_ohlcv(
+        self,
+        symbol: str,
+        timeframe: str = "1h",
+        since: int | None = None,
+        limit: int = 500,
+    ) -> list[list]:
+        """Загрузить исторические OHLCV-свечи.
+
+        Args:
+            symbol: Торговая пара (например 'BTC/USDT')
+            timeframe: Таймфрейм ('1m', '5m', '1h', '4h', '1d' и т.д.)
+            since: Unix timestamp в мс — начало периода (None = с начала)
+            limit: Максимальное число свечей за один запрос
+
+        Returns:
+            Список свечей в формате CCXT:
+            [[timestamp_ms, open, high, low, close, volume], ...]
+        """
+
 
 __all__ = ["IExchangeConnector"]

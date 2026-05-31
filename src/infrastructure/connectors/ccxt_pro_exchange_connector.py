@@ -361,5 +361,48 @@ class CcxtProExchangeConnector(IExchangeConnector):
         order = await self._exchange.fetch_order(order_id, symbol)
         return order
 
+    async def fetch_ohlcv(
+        self,
+        symbol: str,
+        timeframe: str = "1h",
+        since: int | None = None,
+        limit: int = 500,
+    ) -> list[list]:
+        """Загрузить исторические OHLCV-свечи через ccxt ``fetch_ohlcv()``.
+
+        Выполняет постраничную докачку: если свечей меньше чем запрошено
+        и биржа вернула полную страницу, делает дополнительные запросы.
+
+        Args:
+            symbol: Торговая пара (например 'BTC/USDT')
+            timeframe: Таймфрейм ('1m', '5m', '1h', '4h', '1d' и т.д.)
+            since: Unix timestamp в мс — начало периода (None = последние limit свечей)
+            limit: Максимальное число свечей за один запрос
+
+        Returns:
+            Список свечей: [[timestamp_ms, open, high, low, close, volume], ...]
+        """
+        all_candles: list[list] = []
+        current_since = since
+        page_limit = min(limit, 1000)  # биржи часто ограничивают до 1000
+
+        while True:
+            candles = await self._exchange.fetch_ohlcv(
+                symbol, timeframe, since=current_since, limit=page_limit
+            )
+            if not candles:
+                break
+            all_candles.extend(candles)
+            # Если запрос без since — возвращаем как есть
+            if since is None:
+                break
+            # Если страница неполная — данных больше нет
+            if len(candles) < page_limit:
+                break
+            # Следующая страница: after last timestamp
+            current_since = candles[-1][0] + 1
+
+        return all_candles
+
 
 __all__ = ["CcxtProExchangeConnector"]

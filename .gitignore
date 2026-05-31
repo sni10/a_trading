@@ -74,6 +74,10 @@ order_book_analysis.log
 *.swo
 
 
+# --- Бэктест --- #
+# Кэш исторических OHLCV-данных (не коммитим в репозиторий).
+data/ohlcv_cache/
+
 # --- Системные файлы --- #
 # Системные файлы для macOS и Windows.
 .DS_Store
