@@ -50,10 +50,10 @@ class _FakeSnapshotService:
 
 
 @pytest.mark.asyncio
-async def test_run_realtime_core_processes_all_ticks_and_saves_snapshots() -> None:
+async def testrun_realtime_core_processes_all_ticks_and_saves_snapshots() -> None:
     """Проверяет core-логику async-конвейера без реальной сети/CCXT.
 
-    Тестирует функцию ``_run_realtime_core`` напрямую, используя
+    Тестирует функцию ``run_realtime_core`` напрямую, используя
     фейковые ticker_source/pipeline/snapshot_svc.
     """
 
@@ -82,7 +82,7 @@ async def test_run_realtime_core_processes_all_ticks_and_saves_snapshots() -> No
     # Стартуем с ticker_id == 10, чтобы проверить корректный инкремент.
     start_ticker_id = 10
 
-    await run_realtime_trading._run_realtime_core(  # type: ignore[attr-defined]
+    await run_realtime_trading.run_realtime_core(  # type: ignore[attr-defined]
         ticker_source=fake_source,
         pipeline=fake_pipeline,
         snapshot_svc=fake_snapshot,

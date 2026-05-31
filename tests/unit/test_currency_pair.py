@@ -23,16 +23,7 @@ def test_currency_pair_creation_with_defaults():
     assert pair.deal_count == 3
     assert pair.order_life_time == 1
 
-    # Cache settings (defaults)
-    assert pair.bar_timeframe == "1m"
-    assert pair.bar_window_size == 10000
-    assert pair.orderbook_depth == 2000
-    assert pair.trades_history_size == 5000
-    assert pair.indicator_window_size == 10000
-
-    # Estimate cache size (raw data ~1.8MB + indicators ~7.15MB)
-    cache_mb = pair.estimate_cache_size_mb()
-    assert 8.0 <= cache_mb <= 10.0, f"Expected cache ~9MB, got {cache_mb:.2f}MB"
+    # Cache settings УДАЛЕНЫ - теперь они в AppConfig.cache (глобально)
 
 
 def test_currency_pair_custom_settings():
@@ -42,24 +33,21 @@ def test_currency_pair_custom_settings():
         base_currency="ETH",
         quote_currency="USDT",
         # From bad_example config.json
-        deal_quota=25.0,
-        profit_markup=1.5,
-        deal_count=3,
-        order_life_time=1,
+        deal_quota=50.0,
+        profit_markup=2.0,
+        deal_count=5,
+        order_life_time=2,
         min_step=0.0001,
         price_step=0.01,
-        # Custom cache
-        bar_timeframe="5m",
-        bar_window_size=5000,
-        orderbook_depth=1000,
-        trades_history_size=2000,
     )
 
     assert pair.symbol == "ETH/USDT"
-    assert pair.bar_timeframe == "5m"
-    assert pair.bar_window_size == 5000
-    assert pair.orderbook_depth == 1000
-    assert pair.trades_history_size == 2000
+    assert pair.deal_quota == 50.0
+    assert pair.profit_markup == 2.0
+    assert pair.deal_count == 5
+    assert pair.order_life_time == 2
+    assert pair.min_step == 0.0001
+    assert pair.price_step == 0.01
 
 
 def test_currency_pair_serialization():
@@ -83,7 +71,7 @@ def test_currency_pair_serialization():
     assert restored.symbol == original.symbol
     assert restored.deal_quota == original.deal_quota
     assert restored.profit_markup == original.profit_markup
-    assert restored.bar_window_size == original.bar_window_size
+    # bar_window_size больше не в CurrencyPair
 
 
 def test_currency_pair_repr():
@@ -99,5 +87,4 @@ def test_currency_pair_repr():
     assert "deal_quota=25.0" in repr_str
     assert "profit_markup=1.5%" in repr_str
     assert "deal_count=3" in repr_str
-    assert "cache≈" in repr_str
-    assert "MB" in repr_str
+    # cache≈ больше не в repr (кэш в глобальном конфиге)

@@ -1,9 +1,17 @@
 """Infrastructure-level реализации репозиториев.
 
-На этом этапе есть только in-memory реализация репозитория валютных пар,
-но структура модуля сразу закладывается под будущие реализации поверх БД.
+Реализации интерфейсов domain/interfaces:
+- SqlAlchemy* для SQLite/PostgreSQL (универсально)
 """
 
-from .currency_pair_in_memory import InMemoryCurrencyPairRepository
+from .currency_pair_sqlalchemy import SqlAlchemyCurrencyPairRepository
+from .deal_sqlalchemy import SqlAlchemyDealRepository
+from .order_sqlalchemy import SqlAlchemyOrderRepository
+from .trade_sqlalchemy import SqlAlchemyTradeRepository
 
-__all__ = ["InMemoryCurrencyPairRepository"]
+__all__ = [
+    "SqlAlchemyCurrencyPairRepository",
+    "SqlAlchemyOrderRepository",
+    "SqlAlchemyTradeRepository",
+    "SqlAlchemyDealRepository",
+]

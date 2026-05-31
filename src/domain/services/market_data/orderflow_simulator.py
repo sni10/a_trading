@@ -17,11 +17,16 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from src.domain.interfaces.cache import IMarketCache
-from src.infrastructure.logging.logging_setup import log_stage
+from src.domain.interfaces.logger import ILogger
 
 
 def update_orderflow_from_tick(
-    context: Dict[str, Any], *, symbol: str, price: float, ts: int
+    context: Dict[str, Any],
+    *,
+    symbol: str,
+    price: float,
+    ts: int,
+    logger: ILogger | None = None,
 ) -> None:
     """Обновить стакан, трейды и (опционально) бар по тику.
 
@@ -99,14 +104,11 @@ def update_orderflow_from_tick(
     }
     cache.add_bar(bar)
 
-    log_stage(
-        "FEEDS",
-        "Симуляция стакана, трейда и бара по тику",
-        symbol=symbol,
-        price=price,
-        ts=ts,
-        levels=levels,
-    )
+    if logger:
+        logger.log_stage(
+            "FEEDS",
+            f"Симуляция стакана, трейда и бара по тику: {symbol} @ {price}, ts={ts}, levels={levels}",
+        )
 
 
 __all__ = ["update_orderflow_from_tick"]

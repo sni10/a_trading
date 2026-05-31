@@ -1,17 +1,20 @@
 from __future__ import annotations
 
-from src.config.config import AppConfig
+from src.config.config import AppConfig, CacheConfig
 from src.domain.entities.currency_pair import CurrencyPair
 from src.infrastructure.cache.in_memory import InMemoryIndicatorStore
 
 
 def test_indicator_store_uses_intervals_from_config() -> None:
-    pair = CurrencyPair("ETH/USDT", "ETH", "USDT", indicator_window_size=5)
+    pair = CurrencyPair("ETH/USDT", "ETH", "USDT")
+    # indicator_window_size теперь в AppConfig.cache
+    cache_cfg = CacheConfig(indicator_window_size=5)
     cfg = AppConfig(
         indicator_fast_interval=1,
         indicator_medium_interval=3,
         indicator_heavy_interval=5,
     )
+    cfg.cache = cache_cfg
 
     store = InMemoryIndicatorStore(pair, cfg)
 
@@ -29,8 +32,12 @@ def test_indicator_store_uses_intervals_from_config() -> None:
 
 
 def test_indicator_store_respects_indicator_window_size() -> None:
-    pair = CurrencyPair("ETH/USDT", "ETH", "USDT", indicator_window_size=3)
+    pair = CurrencyPair("ETH/USDT", "ETH", "USDT")
+    # indicator_window_size теперь в AppConfig.cache
+    cache_cfg = CacheConfig(indicator_window_size=3)
     cfg = AppConfig()
+    cfg.cache = cache_cfg
+
     store = InMemoryIndicatorStore(pair, cfg)
 
     # Имитируем запись значений индикатора в fast_history

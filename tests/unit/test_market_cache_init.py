@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Dict, Any
 
+from src.config.config import AppConfig, CacheConfig
 from src.domain.entities.currency_pair import CurrencyPair
 from src.infrastructure.cache.in_memory import InMemoryMarketCache
 
@@ -17,12 +18,18 @@ def test_market_cache_respects_pair_window_sizes() -> None:
         symbol="ETH/USDT",
         base_currency="ETH",
         quote_currency="USDT",
+    )
+
+    # Параметры кэша теперь в AppConfig.cache
+    cache_cfg = CacheConfig(
         bar_window_size=10,
         orderbook_depth=5,
         trades_history_size=7,
     )
+    cfg = AppConfig()
+    cfg.cache = cache_cfg
 
-    cache = InMemoryMarketCache(pair)
+    cache = InMemoryMarketCache(pair, cfg)
 
     # Bars window respects maxlen
     for i in range(20):
@@ -51,7 +58,8 @@ def test_market_cache_respects_pair_window_sizes() -> None:
 
 def test_market_cache_ticker_roundtrip() -> None:
     pair = CurrencyPair("ETH/USDT", "ETH", "USDT")
-    cache = InMemoryMarketCache(pair)
+    cfg = AppConfig()
+    cache = InMemoryMarketCache(pair, cfg)
 
     ticker = {
         "symbol": "ETH/USDT",

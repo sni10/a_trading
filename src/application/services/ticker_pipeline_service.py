@@ -10,10 +10,12 @@ from src.domain.services.context.state import (
     record_decision,
 )
 from src.domain.services.indicators.indicator_engine import compute_indicators
+from src.domain.services.orders.buy_order_timeout_service import cancel_stale_buy_orders
 from src.domain.services.strategies.strategy_hub import evaluate_strategies
 from src.domain.services.orchestrator.orchestrator import decide
 from src.domain.services.execution.execution_service import execute
-from src.infrastructure.logging.logging_setup import log_info
+from src.infrastructure.logging import log_info
+from src.infrastructure.logging.logger_adapter import LoggerAdapter
 
 # Имя логгера для этого модуля
 _LOG = __name__
@@ -36,6 +38,7 @@ class TickPipelineService:
 
     def __init__(self, cfg: AppConfig) -> None:
         self._cfg = cfg
+        self._logger = LoggerAdapter(_LOG)
 
     def process_tick(
         self,
@@ -56,12 +59,51 @@ class TickPipelineService:
         log_info(f"🌐 [FEEDS] Обновление market-state | ticker_id: {ticker_id} | symbol: {symbol} | price: {price:.8f} | ts: {ts}", _LOG)
         update_market_state(context, symbol=symbol, price=price, ts=ts)
 
+        # ORDER TIMEOUT: отмена протухших BUY-ордеров.
+        timeout_sec = self._cfg.buy_order_timeout_sec
+        pending_send_timeout_sec = self._cfg.buy_order_pending_send_timeout_sec
+        timeout_result = cancel_stale_buy_orders(
+            context,
+            symbol=symbol,
+            now_ts=ts,
+            timeout_sec=timeout_sec,
+            pending_send_timeout_sec=pending_send_timeout_sec,
+        )
+        if timeout_result.canceled_orders:
+            log_info(
+                f"🕒 [ORDER_TIMEOUT] Отменено BUY/SELL: {timeout_result.canceled_orders} | "
+                f"сделок: {timeout_result.canceled_deals}",
+                _LOG,
+            )
+        # Если есть ордера на бирже, которые нужно отменить — складываем
+        # их ID в очередь для async-воркера (order_execution_worker).
+        if timeout_result.exchange_order_ids_to_cancel:
+            cancel_queue = (
+                context
+                .setdefault("pending_exchange_cancels", {})
+                .setdefault(symbol, [])
+            )
+            cancel_queue.extend(timeout_result.exchange_order_ids_to_cancel)
+            log_info(
+                f"🕒 [ORDER_TIMEOUT] В очередь на отмену на бирже: "
+                f"{timeout_result.exchange_order_ids_to_cancel}",
+                _LOG,
+            )
+
         # IND: расчёт индикаторов поверх истории цен.
         log_info(f"📊 [IND] Расчёт индикаторов | ticker_id: {ticker_id} | symbol: {symbol} | price: {price:.8f}", _LOG)
         indicators = compute_indicators(
-            context, ticker_id=ticker_id, symbol=symbol, price=price
+            context,
+            ticker_id=ticker_id,
+            symbol=symbol,
+            price=price,
+            logger=self._logger,
         )
-        log_info(f"📊 [IND] Индикаторы рассчитаны | ticker_id: {ticker_id} | sma: {indicators.get('sma', 'N/A')} | rsi: {indicators.get('rsi', 'N/A')}", _LOG)
+        formatted_indicators = _format_indicators(indicators)
+        log_info(
+            f"📊 [IND] Индикаторы рассчитаны | ticker_id: {ticker_id}\n{formatted_indicators}",
+            _LOG,
+        )
 
         # CTX: подготовка контекста для стратегий
         positions = context.get("positions") or []
@@ -96,3 +138,17 @@ class TickPipelineService:
 
 
 __all__ = ["TickPipelineService"]
+
+
+def _format_indicators(indicators: Dict[str, Any]) -> str:
+    if not indicators:
+        return "indicators: {}"
+    lines = ["indicators:"]
+    for key in sorted(indicators.keys()):
+        value = indicators[key]
+        if isinstance(value, float):
+            value_str = f"{value:.8f}"
+        else:
+            value_str = str(value)
+        lines.append(f"  {key}: {value_str}")
+    return "\n".join(lines)
