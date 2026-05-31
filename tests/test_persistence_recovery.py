@@ -12,6 +12,8 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+import pytest
+
 from src.application.context import build_context
 from src.application.repository_factory import build_repositories
 from src.application.services.state_snapshot_service import StateSnapshotService
@@ -24,6 +26,24 @@ from src.domain.services.context.state import init_context
 from src.infrastructure.state.file_state_snapshot_store import FileStateSnapshotStore
 
 
+def _is_postgresql_available() -> bool:
+    """Проверить доступность PostgreSQL без поднятия исключений в test-collection."""
+    try:
+        from src.config.config import load_config as _lc
+        from src.infrastructure.db.engine_factory import build_engine
+        cfg = _lc()
+        engine = build_engine(cfg)
+        with engine.connect():
+            pass
+        return True
+    except Exception:
+        return False
+
+
+@pytest.mark.skipif(
+    not _is_postgresql_available(),
+    reason="PostgreSQL недоступен — интеграционный тест пропущен",
+)
 def test_persistence_and_recovery():
     """Интеграционный тест: сохранение → обрыв → восстановление."""
 

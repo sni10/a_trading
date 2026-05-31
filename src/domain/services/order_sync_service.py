@@ -163,6 +163,19 @@ class OrderSyncService:
             symbol: Торговая пара
             context: Контекст приложения (опционально, для обновления in-memory)
         """
+        # Защита от устаревших (stale) обновлений: если биржевой timestamp
+        # старее локального — игнорируем обновление.
+        exchange_ts = exchange_order_dict.get("timestamp")
+        if exchange_ts is not None and local_order.timestamp and int(exchange_ts) < local_order.timestamp:
+            if self._logger:
+                self._logger.log_stage(
+                    "ORDER_SYNC",
+                    "Stale exchange update ignored",
+                    local_ts=local_order.timestamp,
+                    exchange_ts=exchange_ts,
+                )
+            return
+
         # Обновить поля локального ордера данными с биржи
         local_order.exchange_order_id = str(exchange_order_dict.get("id", ""))
         local_order.status = str(exchange_order_dict.get("status", ""))
@@ -179,6 +192,8 @@ class OrderSyncService:
             if exchange_order_dict.get("lastTradeTimestamp")
             else None
         )
+        if exchange_ts is not None:
+            local_order.timestamp = int(exchange_ts)
 
         # Сохранить в БД
         self._order_repo.upsert(local_order)
@@ -192,6 +207,41 @@ class OrderSyncService:
                 status=local_order.status,
                 filled=local_order.filled,
             )
+
+    def apply_exchange_order(
+        self,
+        exchange_order_dict: dict,
+        symbol: str,
+        context: dict | None = None,
+    ) -> None:
+        """Найти локальный ордер по exchange_order_id и применить обновление.
+
+        Удобный метод для WebSocket-потока ордеров: биржа присылает dict,
+        нужно найти соответствующий локальный ордер в context и обновить его.
+
+        Args:
+            exchange_order_dict: Ответ от биржи (CCXT Order Structure dict)
+            symbol: Торговая пара
+            context: Контекст приложения (содержит context["orders"][symbol])
+        """
+        exchange_id = str(exchange_order_dict.get("id", ""))
+        if not exchange_id:
+            return
+
+        orders: list[Order] = []
+        if context:
+            orders = context.get("orders", {}).get(symbol, [])
+
+        local_order = next(
+            (o for o in orders if o.exchange_order_id == exchange_id),
+            None,
+        )
+        if local_order is None:
+            return
+
+        self.apply_exchange_order_to_local(
+            local_order, exchange_order_dict, symbol=symbol, context=context
+        )
 
     # =========================================================================
     # ЗАГЛУШКИ (TODO: Удалить после реализации IExchangeConnector методов)
