@@ -60,34 +60,42 @@ class SqlAlchemyDealRepository(IDealRepository):
             )
             session.add(model)
             session.flush()
-            return _model_to_entity(model)
+            # Обратная синхронизация: назначить DB-PK в in-memory объект
+            deal.assign_db_id(model.id)
+            return deal
 
     def update(self, deal: Deal) -> None:
         with self._sf.session_scope() as session:
-            model = session.get(DealModel, deal.id)
+            if deal.id is not None:
+                model = session.get(DealModel, deal.id)
+            else:
+                model = None
+
             if model is None:
-                # Если записи нет, создаём.
-                session.add(
-                    DealModel(
-                        id=deal.id,
-                        symbol=deal.symbol,
-                        status=deal.status,
-                        created_at=deal.created_at,
-                        opened_at=deal.opened_at,
-                        closed_at=deal.closed_at,
-                        buy_order_json=deal.buy_order.to_dict() if deal.buy_order else None,
-                        sell_order_json=deal.sell_order.to_dict() if deal.sell_order else None,
-                        target_amount=deal.target_amount,
-                        target_buy_price=deal.target_buy_price,
-                        target_sell_price=deal.target_sell_price,
-                        expected_profit=deal.expected_profit,
-                        max_loss_amount=deal.max_loss_amount,
-                        strategy_name=deal.strategy_name,
-                        metadata_json=dict(deal.metadata or {}),
-                    )
+                # Новая запись — INSERT без явного id (БД назначит)
+                new_model = DealModel(
+                    symbol=deal.symbol,
+                    status=deal.status,
+                    created_at=deal.created_at,
+                    opened_at=deal.opened_at,
+                    closed_at=deal.closed_at,
+                    buy_order_json=deal.buy_order.to_dict() if deal.buy_order else None,
+                    sell_order_json=deal.sell_order.to_dict() if deal.sell_order else None,
+                    target_amount=deal.target_amount,
+                    target_buy_price=deal.target_buy_price,
+                    target_sell_price=deal.target_sell_price,
+                    expected_profit=deal.expected_profit,
+                    max_loss_amount=deal.max_loss_amount,
+                    strategy_name=deal.strategy_name,
+                    metadata_json=dict(deal.metadata or {}),
                 )
+                session.add(new_model)
+                session.flush()
+                # Обратная синхронизация DB PK → in-memory entity
+                deal.assign_db_id(new_model.id)
                 return
 
+            # Update существующего
             model.symbol = deal.symbol
             model.status = deal.status
             model.created_at = deal.created_at

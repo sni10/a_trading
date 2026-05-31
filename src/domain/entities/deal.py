@@ -23,14 +23,14 @@ class Deal:
     для отслеживания полного цикла: открытие позиции -> закрытие позиции -> расчет PnL
     """
     # Идентификация
-    id: int                                    # Уникальный ID сделки
-    symbol: str                                # Торговая пара 'BTC/USDT'
+    id: int | None = None                      # DB autoincrement PK (None до сохранения в БД)
+    symbol: str = ""                           # Торговая пара 'BTC/USDT'
 
     # Статус жизненного цикла
-    status: str                                # 'pending', 'open', 'closing', 'closed', 'canceled'
+    status: str = ""                           # 'pending', 'open', 'closing', 'closed', 'canceled'
 
     # Временные метки
-    created_at: int                            # Unix timestamp создания (мс)
+    created_at: int = 0                        # Unix timestamp создания (мс)
     opened_at: int | None = None               # Когда buy_order исполнился
     closed_at: int | None = None               # Когда sell_order исполнился
 
@@ -60,10 +60,20 @@ class Deal:
 
     def __post_init__(self):
         """Синхронизация deal_id в ордерах"""
-        if self.buy_order:
-            self.buy_order.deal_id = self.id
-        if self.sell_order:
-            self.sell_order.deal_id = self.id
+        self._sync_deal_id()
+
+    def _sync_deal_id(self) -> None:
+        """Проставить deal_id в привязанных ордерах (если id уже назначен)."""
+        if self.id is not None:
+            if self.buy_order:
+                self.buy_order.deal_id = self.id
+            if self.sell_order:
+                self.sell_order.deal_id = self.id
+
+    def assign_db_id(self, db_id: int) -> None:
+        """Назначить ID, полученный от БД, и синхронизировать deal_id в ордерах."""
+        self.id = db_id
+        self._sync_deal_id()
 
     # === Проверки статуса ===
 
@@ -96,14 +106,16 @@ class Deal:
     def attach_buy_order(self, order: Order) -> None:
         """Привязывает открывающий ордер"""
         self.buy_order = order
-        self.buy_order.deal_id = self.id
+        if self.id is not None:
+            self.buy_order.deal_id = self.id
         if order.is_filled():
             self.mark_as_open()
 
     def attach_sell_order(self, order: Order) -> None:
         """Привязывает закрывающий ордер"""
         self.sell_order = order
-        self.sell_order.deal_id = self.id
+        if self.id is not None:
+            self.sell_order.deal_id = self.id
         self.status = self.STATUS_CLOSING
         if order.is_filled():
             self.mark_as_closed()
@@ -218,7 +230,7 @@ class Deal:
         metadata_dict = metadata if isinstance(metadata, dict) else {}
 
         return cls(
-            id=int(data["id"]),
+            id=int(data["id"]) if data.get("id") is not None else None,
             symbol=str(data["symbol"]),
             status=str(data["status"]),
             created_at=int(data["created_at"]),

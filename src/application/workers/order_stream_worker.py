@@ -23,8 +23,8 @@ async def order_stream_worker(
 
     while True:
         try:
-            async for order in connector.stream_orders(symbol):
-                order_sync.apply_exchange_order(order, symbol=symbol, context=context)
+            async for raw_order in connector.stream_orders(symbol):
+                order_sync.apply_exchange_order(raw_order, symbol=symbol, context=context)
 
                 if is_stopped is not None and is_stopped():
                     log_stage(

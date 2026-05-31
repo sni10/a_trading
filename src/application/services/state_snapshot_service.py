@@ -107,12 +107,13 @@ class StateSnapshotService:
     def _save_entities_to_db(self, context: Dict[str, Any]) -> None:
         """Сохранить БД-сущности из контекста в БД.
 
-        Сохраняет:
-        - Активные сделки (deals)
-        - Открытые ордера (orders)
-        - Недавние трейды (trades)
+        Порядок важен: deals → orders → trades, т.к. каждый следующий
+        уровень ссылается на PK предыдущего (deal_id, order_id).
+
+        Репозитории при INSERT через ``flush()`` автоматически
+        синхронизируют DB autoincrement PK обратно в in-memory entity.
         """
-        # Deals
+        # 1. Deals — сначала, чтобы deal.id был назначен до сохранения orders
         if self._deal_repo:
             deals = (context.get("deals") or {}).get(self._symbol, [])
             saved_deals = 0
@@ -120,55 +121,45 @@ class StateSnapshotService:
                 status = str(getattr(deal, "status", "")).lower()
                 if status:
                     self._deal_repo.update(deal)
+                    # После update deal.id гарантированно назначен БД
                     saved_deals += 1
             log_stage(
                 "DB_SAVE",
-                f"💾 Сохранено сделок (включая canceled): {saved_deals}",
+                f"💾 Сохранено сделок: {saved_deals}",
                 symbol=self._symbol,
             )
 
-        # Orders
+        # 2. Orders — deal_id уже проставлен (через deal.assign_db_id → _sync_deal_id)
         if self._order_repo:
             orders = (context.get("orders") or {}).get(self._symbol, [])
             saved_orders = 0
             for order in orders:
                 status = str(getattr(order, "status", "")).lower()
-                if status in ["open", "closed", "canceled"]:
+                if status in ("open", "closed", "canceled"):
                     self._order_repo.upsert(order)
+                    # После upsert order.id гарантированно назначен БД
                     saved_orders += 1
-                    # После upsert загружаем сохраненный order с id из БД
-                    if order.exchange_order_id:
-                        saved_order = next(
-                            (o for o in self._order_repo.list_by_symbol(self._symbol, limit=100)
-                             if o.exchange_order_id == order.exchange_order_id),
-                            None
-                        )
-                        if saved_order and saved_order.id:
-                            order.id = saved_order.id
             log_stage(
                 "DB_SAVE",
-                f"💾 Сохранено ордеров (включая canceled): {saved_orders}",
+                f"💾 Сохранено ордеров: {saved_orders}",
                 symbol=self._symbol,
             )
 
-        # Trades - проставить order_id перед сохранением
+        # 3. Trades — order_id уже проставлен
         if self._trade_repo:
             trades = (context.get("trades") or {}).get(self._symbol, [])
             orders = (context.get("orders") or {}).get(self._symbol, [])
 
-            # Создать мапу exchange_order_id -> order.id
-            order_map = {o.exchange_order_id: o.id for o in orders if o.exchange_order_id and o.id}
-
             for trade in trades:
                 # Если order_id не установлен, попробовать найти через связь с order
                 if not trade.order_id:
-                    # Найти соответствующий order для этого трейда (по symbol, side, timestamp)
                     matching_order = next(
                         (o for o in orders
-                         if o.symbol == trade.symbol and o.side == trade.side),
+                         if o.symbol == trade.symbol and o.side == trade.side
+                         and o.id is not None),
                         None
                     )
-                    if matching_order and matching_order.id:
+                    if matching_order:
                         trade.order_id = matching_order.id
 
                 self._trade_repo.upsert(trade)

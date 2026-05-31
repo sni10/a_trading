@@ -114,6 +114,12 @@ def load_config(
         base.buy_order_timeout_sec,
     )
 
+    env_pending_send_timeout = os.getenv("BUY_ORDER_PENDING_SEND_TIMEOUT_SEC")
+    base.buy_order_pending_send_timeout_sec = parse_float(
+        env_pending_send_timeout,
+        base.buy_order_pending_send_timeout_sec,
+    )
+
     # --- API‑ключи биржи ---
     # Приоритет: прямые значения в env, затем файлы из env,
     # затем secure_api_keys/{exchange_id}/api_key.txt (api_secret.txt).

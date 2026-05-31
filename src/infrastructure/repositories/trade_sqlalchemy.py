@@ -64,29 +64,35 @@ class SqlAlchemyTradeRepository(ITradeRepository):
     def upsert(self, trade: Trade) -> None:
         model = _entity_to_model(trade)
         with self._sf.session_scope() as session:
-            # Если есть id - update существующего, иначе ищем по exchange_trade_id
-            if model.id:
-                existing = session.get(TradeModel, model.id)
-                if existing:
-                    # Update существующего
-                    for key, value in model.__dict__.items():
-                        if not key.startswith('_'):
-                            setattr(existing, key, value)
-                    return
-            elif model.exchange_trade_id:
-                # Ищем по exchange_trade_id
-                from sqlalchemy import select
-                stmt = select(TradeModel).where(TradeModel.exchange_trade_id == model.exchange_trade_id)
-                existing = session.scalars(stmt).first()
-                if existing:
-                    # Update существующего
-                    for key, value in model.__dict__.items():
-                        if not key.startswith('_') and key != 'id':
-                            setattr(existing, key, value)
-                    return
+            existing = None
 
-            # Новая запись
-            session.add(model)
+            # 1. Поиск по DB PK
+            if trade.id is not None:
+                existing = session.get(TradeModel, trade.id)
+
+            # 2. Поиск по exchange_trade_id (natural key от биржи)
+            if existing is None and trade.exchange_trade_id:
+                stmt = select(TradeModel).where(
+                    TradeModel.exchange_trade_id == trade.exchange_trade_id
+                )
+                existing = session.scalars(stmt).first()
+
+            if existing:
+                # Update существующей записи
+                for key, value in model.__dict__.items():
+                    if not key.startswith('_') and key != 'id':
+                        setattr(existing, key, value)
+                # Синхронизировать DB PK → in-memory entity
+                trade.id = existing.id
+                return
+
+            # INSERT новой записи (без явного id — БД назначит)
+            new_model = _entity_to_model(trade)
+            new_model.id = None  # Гарантируем что DB назначит autoincrement
+            session.add(new_model)
+            session.flush()
+            # Синхронизировать DB PK → in-memory entity
+            trade.id = new_model.id
 
     def get_by_id(self, trade_id: int) -> Trade | None:
         with self._sf.session_scope() as session:
